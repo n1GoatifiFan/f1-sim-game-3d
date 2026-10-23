@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Car preview — dev tool</title>
+<style>
+  html, body { margin: 0; background: #12161c; overflow: hidden; font-family: system-ui, sans-serif; }
+  #gl { display: block; }
+  #label { position: fixed; left: 12px; top: 10px; color: #cfe; font: 12px/1.5 monospace; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="label"></div>
+<!-- dev-only inspection page, not part of the shipped game -->
+<script src="../lib/three.min.js"></script>
+<script src="../core/utils.js"></script>
+<script src="../core/settings.js"></script>
+<script src="../data/teams.js"></script>
+<script src="../data/drivers.js"></script>
+<script src="../data/sponsors.js"></script>
+<script src="../core/renderer.js"></script>
+<script src="../world/car_model.js"></script>
+<script>
+(function (F1) {
+  var params = new URLSearchParams(location.search);
+  var view = params.get('view') || 'front34';
+  var teamId = params.get('team') || 'mclaren';
+  var driverId = params.get('driver') || 'norris';
+  var wire = params.get('wire') === '1';
+  var W = window.innerWidth, H = window.innerHeight;
+
+  var renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gl'), antialias: true });
+  renderer.setPixelRatio(1);
+  renderer.setSize(W, H);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  renderer.shadowMap.enabled = true;
+
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x1b212a);
+  var camera = new THREE.PerspectiveCamera(35, W / H, 0.05, 100);
+
+  // neutral grey studio light so the shape is readable
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x333333, 1.1));
+  var d1 = new THREE.DirectionalLight(0xffffff, 2.2); d1.position.set(4, 8, 6); scene.add(d1);
+  var d2 = new THREE.DirectionalLight(0xffffff, 1.1); d2.position.set(-6, 4, -5); scene.add(d2);
+
+  var grid = new THREE.GridHelper(12, 24, 0x334455, 0x223344);
+  grid.position.y = 0;
+  scene.add(grid);
+  var axes = new THREE.AxesHelper(1.2);
+  scene.add(axes);
+
+  var car = F1.buildCar({ teamId: teamId, driverId: driverId, detail: 2 });
+  car.traverse(function (o) {
+    if (o.isMesh) {
+      o.castShadow = true; o.receiveShadow = true;
+      if (wire) { o.material = new THREE.MeshBasicMaterial({ color: 0x44aaff, wireframe: true }); }
+    }
+  });
+  scene.add(car);
+
+  var views = {
+    front34: { yaw: -2.5, pitch: 0.22, dist: 7.4, tx: 0, ty: 0.45, tz: 0 },
+    rear34: { yaw: 0.7, pitch: 0.22, dist: 7.4, tx: 0, ty: 0.45, tz: 0 },
+    side: { yaw: -Math.PI / 2, pitch: 0.03, dist: 8.2, tx: 0, ty: 0.45, tz: 0 },
+    top: { yaw: -Math.PI / 2, pitch: 1.45, dist: 7.4, tx: 0, ty: 0, tz: 0 },
+    front: { yaw: Math.PI, pitch: 0.06, dist: 7.0, tx: 0, ty: 0.45, tz: 0 },
+    rear: { yaw: 0, pitch: 0.06, dist: 7.0, tx: 0, ty: 0.45, tz: 0 },
+    low: { yaw: -2.2, pitch: 0.02, dist: 6.6, tx: 0, ty: 0.45, tz: 0 }
+  };
+  var v = views[view] || views.front34;
+  var cx = Math.sin(v.yaw) * Math.cos(v.pitch) * v.dist;
+  var cz = Math.cos(v.yaw) * Math.cos(v.pitch) * v.dist;
+  var cy = Math.sin(v.pitch) * v.dist + 0.4;
+  camera.position.set(v.tx + cx, cy, v.tz + cz);
+  camera.lookAt(v.tx, v.ty, v.tz);
+
+  document.getElementById('label').textContent = 'view=' + view + ' team=' + teamId + ' driver=' + driverId +
+    (wire ? ' WIRE' : '') + ' | z: nose=-Z rear=+Z, x: right=+X';
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(function () { renderer.render(scene, camera); });
+})(window.F1 = window.F1 || {});
+</script>
+</body>
+</html>

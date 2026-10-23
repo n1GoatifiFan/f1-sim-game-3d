@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>F1 2026 — Career Racing</title>
+<link rel="stylesheet" href="css/ui.css">
+</head>
+<body>
+
+<div id="app">
+  <canvas id="gl" aria-label="Formula 1 game viewport"></canvas>
+
+  <div id="ui">
+    <div id="screen-root"></div>
+    <div id="hud-root"></div>
+    <div id="toast-root"></div>
+  </div>
+
+  <!-- boot / loading -->
+  <div id="boot">
+    <div class="boot-logo">
+      <span class="boot-f1">F1</span>
+      <span class="boot-2026">2026</span>
+    </div>
+    <div class="boot-sub">Career Racing</div>
+    <div class="boot-bar-wrap"><div id="boot-bar"></div></div>
+    <div class="boot-meta">
+      <span id="boot-step">Starting…</span>
+      <span id="boot-pct">0%</span>
+    </div>
+    <div id="boot-trivia"></div>
+    <div class="boot-stripes">
+      <i style="background:#e10600"></i><i style="background:#ff8000"></i>
+      <i style="background:#ffd400"></i><i style="background:#00e0c7"></i>
+      <i style="background:#1868db"></i><i style="background:#b25cff"></i>
+    </div>
+  </div>
+
+  <div id="error-overlay"></div>
+</div>
+
+<noscript style="color:#fff;font-family:sans-serif;position:fixed;inset:0;display:grid;place-items:center;background:#000;z-index:999">
+  This game needs JavaScript enabled.
+</noscript>
+
+<!-- ============================ LIBRARIES ============================ -->
+<script src="lib/three.min.js"></script>
+
+<!-- ============================ CORE ================================= -->
+<script src="core/utils.js"></script>
+<script src="core/settings.js"></script>
+<script src="core/input.js"></script>
+<script src="core/renderer.js"></script>
+
+<!-- ============================ DATA ================================= -->
+<script src="data/teams.js"></script>
+<script src="data/drivers.js"></script>
+<script src="data/sponsors.js"></script>
+<script src="data/circuits/index.js"></script>
+
+<!-- ============================ WORLD ================================ -->
+<script src="world/car_model.js"></script>
+<script src="world/showroom.js"></script>
+
+<!-- ============================ UI =================================== -->
+<script src="ui/ui.js"></script>
+
+<!-- ============================ APP ================================== -->
+<script src="core/app.js"></script>
+<script src="main.js"></script>
+</body>
+</html>

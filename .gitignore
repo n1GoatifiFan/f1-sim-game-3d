@@ -1,0 +1,5 @@
+# dev / verification artifacts (never shipped)
+tools/screenshots/
+node_modules/
+*.log
+.DS_Store
