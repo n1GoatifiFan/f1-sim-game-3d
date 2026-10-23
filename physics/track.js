@@ -490,7 +490,16 @@
       if (x[i] < minX) minX = x[i]; if (x[i] > maxX) maxX = x[i];
       if (z[i] < minZ) minZ = z[i]; if (z[i] > maxZ) maxZ = z[i];
     }
-    var maxYv = -Infinity, minYv = Infinity;
+    // elevation data carries an arbitrary datum: re-base it so the lowest
+    // point of the lap sits on the ground plane (y = 0). Physics only cares
+    // about differences, and the renderer needs a predictable floor.
+    var minYv = Infinity;
+    for (i = 0; i < count; i++) { if (y[i] < minYv) minYv = y[i]; }
+    if (isFinite(minYv) && Math.abs(minYv) > 0.001) {
+      for (i = 0; i <= count; i++) y[i] -= minYv;
+    }
+    var maxYv = -Infinity;
+    minYv = Infinity;
     for (i = 0; i < count; i++) { if (y[i] > maxYv) maxYv = y[i]; if (y[i] < minYv) minYv = y[i]; }
     model.maxY = maxYv; model.minY = minYv;
     model.bounds = { minX: minX, maxX: maxX, minZ: minZ, maxZ: maxZ };

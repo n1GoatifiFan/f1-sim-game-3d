@@ -116,7 +116,7 @@
       lapRecord: { time: 73.078, driver: 'Valtteri Bottas', year: 2019 },
       elevation: 'flat', weather: { base: 'overcast', rainChance: 0.28 },
       theme: { bg: '#16211c', sky: '#a8c6d8', ground: '#456440', road: '#3b3c41', accent: '#1868DB',
-               style: 'park', trees: 'mixed', water: true, city: true, mountains: false, palm: false, neon: false, walls: true, sand: false },
+               style: 'park', trees: 'mixed', water: true, city: false, mountains: false, palm: false, neon: false, walls: true, sand: false },
       features: ['wall-of-champions', 'island', 'pit-building'],
       blurb: 'Stop-start, kerb-hopping and the Wall of Champions waiting at the exit.'
     }),
@@ -273,7 +273,7 @@
       lapRecord: { time: 77.774, driver: 'Valtteri Bottas', year: 2021 },
       elevation: 'flat', weather: { base: 'dry', rainChance: 0.3 },
       theme: { bg: '#1a1a18', sky: '#b9c3c9', ground: '#6a6752', road: '#3b3c41', accent: '#00A19B',
-               style: 'city', trees: 'sparse', water: false, city: true, mountains: true, palm: false, neon: false, walls: true, sand: false },
+               style: 'park', trees: 'sparse', water: false, city: false, mountains: true, palm: false, neon: false, walls: true, sand: false },
       features: ['stadium', 'peraltada', 'pit-building'],
       blurb: 'Thin air at 2,200 m, huge straights and a stadium section that shakes the ground.'
     }),
@@ -285,7 +285,7 @@
       lapRecord: { time: 70.540, driver: 'Valtteri Bottas', year: 2018 },
       elevation: 'hilly', weather: { base: 'mixed', rainChance: 0.5 },
       theme: { bg: '#13201a', sky: '#a5c3d6', ground: '#4b6a3b', road: '#3b3c41', accent: '#FFD400',
-               style: 'park', trees: 'mixed', water: true, city: true, mountains: false, palm: false, neon: false, walls: true, sand: false },
+               style: 'park', trees: 'mixed', water: true, city: false, mountains: false, palm: false, neon: false, walls: true, sand: false },
       features: ['senna-s', 'interlagos', 'pit-building'],
       blurb: 'Anti-clockwise, undulating, and the Senna S rewards a late, brave brake release.'
     }),

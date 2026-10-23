@@ -287,8 +287,8 @@
       var la = typeof latA === 'function' ? latA(k, wHalf) : latA;
       var lb = typeof latB === 'function' ? latB(k, wHalf) : latB;
       var cx = model.x[k] - ORIGIN.x, cz = model.z[k] - ORIGIN.z, cy = model.y[k];
-      var yA = cy + Math.tan(bank) * la + (opts.lift || 0);
-      var yB = cy + Math.tan(bank) * lb + (opts.lift || 0);
+      var yA = opts.yA ? opts.yA(k, la) : cy + Math.tan(bank) * la + (opts.lift || 0);
+      var yB = opts.yB ? opts.yB(k, lb) : cy + Math.tan(bank) * lb + (opts.lift || 0);
       var ax = cx + cos * la, az = cz - sin * la;
       var bx = cx + cos * lb, bz = cz - sin * lb;
       if (prev) vLen += Math.hypot(cx - prev.x, cz - prev.z);
@@ -480,6 +480,7 @@
     var animated = [];
     var fogHook = null;   // track_scene registers its THREE.Fog here
     var weather = 'dry';
+    var features = meta.features || [];
 
     /* ---------------- lighting + sky ---------------- */
     var skyPreset = SKY_PRESETS[meta.timeOfDay] || SKY_PRESETS.day;
@@ -551,12 +552,13 @@
 
     /* ---------------- ground ---------------- */
     var spanW = Math.max(model.bounds.maxX - model.bounds.minX, model.bounds.maxZ - model.bounds.minZ);
-    var groundSize = Math.max(3200, spanW * 2.4);
-    var groundTex = (theme.sand ? Textures.sand() : Textures.grass());
+    var groundSize = Math.max(4200, spanW * 3.0);
+    var isDesert = theme.style === 'desert';
+    var groundTex = (isDesert ? Textures.sand() : Textures.grass());
     groundTex.wrapS = groundTex.wrapT = THREE.RepeatWrapping;
     groundTex.repeat.set(groundSize / 26, groundSize / 26);
     var groundMat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(theme.sand ? '#c9b98f' : F1.util.mixHex(theme.ground, '#ffffff', 0.55)),
+      color: new THREE.Color(isDesert ? '#c9b98f' : F1.util.mixHex(theme.ground, '#ffffff', 0.55)),
       map: groundTex, roughness: 0.98, metalness: 0
     });
     // ground box: the visible top face plus a thick skirt so low camera
@@ -568,12 +570,27 @@
     group.add(ground);
 
     /* ---------------- run-off (grass/gravel/sand apron) ---------------- */
+    // street circuits have concrete/asphalt verges between the track and the
+    // walls; park/desert circuits get grass or sand
+    var streetStyle = theme.style === 'street' || theme.style === 'harbour' ||
+      (theme.walls && theme.city);
     var runMat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(theme.sand ? '#d7c49a' : (theme.style === 'desert' ? '#c4ac80' : '#7d9a63')),
-      map: (theme.sand ? Textures.sand() : Textures.grass()),
-      roughness: 0.98, metalness: 0, polygonOffset: true, polygonOffsetFactor: -1, side: THREE.DoubleSide
+      color: new THREE.Color(isDesert ? '#c4ac80'
+        : F1.util.mixHex(theme.ground, '#7f9a5e', 0.45)),
+      map: (isDesert ? Textures.sand() : Textures.grass()).clone(),
+      roughness: 0.98, metalness: 0, polygonOffset: true, polygonOffsetFactor: -1,
+      side: THREE.DoubleSide
     });
-    runMat.map.repeat.set(60, 60);
+    if (streetStyle) {
+      runMat = new THREE.MeshStandardMaterial({
+        color: 0x8f949a, map: Textures.asphalt('#6a6e74').clone(),
+        roughness: 0.92, metalness: 0.02, polygonOffset: true,
+        polygonOffsetFactor: -1, side: THREE.DoubleSide
+      });
+    }
+    runMat.map.colorSpace = THREE.SRGBColorSpace;
+    runMat.map.needsUpdate = true;
+    runMat.map.repeat.set(1, 1);   // the ribbon UVs already tile every 40 m
     // two side aprons only: a full-width ribbon would draw over the asphalt
     [-1, 1].forEach(function (side) {
       var runoff = new THREE.Mesh(ribbon(model,
@@ -584,6 +601,31 @@
       runoff.receiveShadow = false;
       runoff.renderOrder = -1;
       group.add(runoff);
+    });
+
+    /* embankment: blend from the track edge down to the flat ground so
+       elevated circuits (Spa, Monaco, COTA, Austria...) don't float above a
+       perfectly flat plain. Also stops grandstands/buildings hanging in air. */
+    var GROUND_Y = -0.32;
+    var shoulderMat = new THREE.MeshStandardMaterial({
+      color: groundMat.color.clone(),
+      map: groundTex,
+      roughness: 1, metalness: 0, side: THREE.DoubleSide
+    });
+    var elevSpread = model.maxY - model.minY;
+    // only needed where the lap actually climbs: on flat circuits the ground
+    // plane already sits at the track height
+    if (elevSpread > 4) [-1, 1].forEach(function (side) {
+      var shoulder = new THREE.Mesh(ribbon(model,
+        function (k, w) { return side * (w + 13.6); },
+        function (k, w) { return side * (w + 95); },
+        {
+          uvLength: 26, step: 3,
+          yA: function (k) { return model.y[k] - 0.12; },
+          yB: function () { return GROUND_Y; }
+        }), shoulderMat);
+      shoulder.receiveShadow = false;
+      group.add(shoulder);
     });
 
     /* ---------------- asphalt ---------------- */
@@ -695,72 +737,114 @@
     }
 
     /* ---------------- grandstands + crowd ---------------- */
-    var standMat = new THREE.MeshStandardMaterial({ color: 0x2b3038, roughness: 0.85 });
+    var standMat = new THREE.MeshStandardMaterial({
+      color: 0xcfd3d8, roughness: 0.82, side: THREE.DoubleSide
+    });
     var roofMat = new THREE.MeshStandardMaterial({ color: 0xdfe3e7, roughness: 0.6, metalness: 0.25 });
     var crowdMat = new THREE.MeshStandardMaterial({ map: Textures.crowd(), roughness: 0.9 });
     var standGeos = [], roofGeos = [], crowdPlacements = [];
 
     function addGrandstand(s, side, sizeMul) {
       var w = model.width[s];
-      var lat = side * (w * 0.5 + (theme.walls ? 8 : 12));
+      var lat = side * (w * 0.5 + (theme.walls ? 7 : 11));
       var h = model.heading[s];
       var px = model.x[s] - ORIGIN.x + Math.cos(h) * lat;
       var pz = model.z[s] - ORIGIN.z - Math.sin(h) * lat;
       var py = model.y[s];
-      var len = 46 * (sizeMul || 1);
-      var depth = 15;
-      var tiers = 6;
-      var base = new THREE.BoxGeometry(depth, 1.2, len);
-      var local = new THREE.Matrix4().compose(
-        new THREE.Vector3(px, py + 1.4, pz),
-        new THREE.Quaternion().setFromEuler(new THREE.Euler(0, h + (side > 0 ? 0 : Math.PI), 0)),
-        new THREE.Vector3(1, 1, 1));
-      standGeos.push({ geo: base, matrix: local });
+      var len = 58 * (sizeMul || 1);
+      var depth = 17;
+      var tiers = 8;
+      var tierRise = 0.95;
+      var tierDepth = depth / tiers;
+      var rotY = h + (side > 0 ? 0 : Math.PI);
+
+      // Concrete base slab, sitting ON the ground (y = py is the track level)
+      standGeos.push({
+        geo: new THREE.BoxGeometry(depth, 1.0, len),
+        matrix: new THREE.Matrix4().compose(
+          new THREE.Vector3(px, py + 0.4, pz),
+          new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rotY, 0)),
+          new THREE.Vector3(1, 1, 1))
+      });
+
+      // Seating decks climb away from the track
       for (var ti = 0; ti < tiers; ti++) {
-        var tierGeo = new THREE.BoxGeometry(depth * 0.9, 0.55, len);
-        var off = side * (ti * 1.5 - 3);
-        var tm = new THREE.Matrix4().compose(
-          new THREE.Vector3(px + Math.cos(h) * off, py + 2 + ti * 1.05, pz - Math.sin(h) * off),
-          new THREE.Quaternion().setFromEuler(new THREE.Euler(0, h + (side > 0 ? 0 : Math.PI), 0)),
-          new THREE.Vector3(1, 1, 1));
-        standGeos.push({ geo: tierGeo, matrix: tm });
-        // crowd clusters on each tier
-        var seats = Math.round(9 * (sizeMul || 1));
+        var stepOut = (ti + 0.5) / tiers * depth - depth / 2;
+        var deckX = px + Math.cos(h) * side * stepOut;
+        var deckZ = pz - Math.sin(h) * side * stepOut;
+        var deckY = py + 1.0 + ti * tierRise;
+        standGeos.push({
+          geo: new THREE.BoxGeometry(tierDepth * 1.02, 0.7, len),
+          matrix: new THREE.Matrix4().compose(
+            new THREE.Vector3(deckX, deckY, deckZ),
+            new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rotY, 0)),
+            new THREE.Vector3(1, 1, 1))
+        });
+        // crowd clusters on each deck
+        var seats = Math.max(3, Math.round(8 * (sizeMul || 1)));
         for (var c2 = 0; c2 < seats; c2++) {
-          var off2 = side * (ti * 1.5 - 3) + (rnd() - 0.5) * 1.0;
-          var along = (rnd() - 0.5) * len * 0.92;
+          var along = (rnd() - 0.5) * len * 0.9;
           crowdPlacements.push({
-            x: px + Math.cos(h) * off2 + Math.sin(h) * along,
-            y: py + 2.4 + ti * 1.05,
-            z: pz - Math.sin(h) * off2 + Math.cos(h) * along,
-            s: 0.8 + rnd() * 0.5
+            x: deckX + Math.sin(h) * along,
+            y: deckY + 0.75,
+            z: deckZ + Math.cos(h) * along,
+            s: 0.8 + rnd() * 0.45
           });
         }
       }
-      var roofGeo = new THREE.BoxGeometry(depth * 1.15, 0.35, len * 1.02);
-      var rm = new THREE.Matrix4().compose(
-        new THREE.Vector3(px + Math.cos(h) * side * 1.5, py + 2 + tiers * 1.05 + 1.6, pz - Math.sin(h) * side * 1.5),
-        new THREE.Quaternion().setFromEuler(new THREE.Euler(0, h + (side > 0 ? 0 : Math.PI), 0)),
-        new THREE.Vector3(1, 1, 1));
-      roofGeos.push({ geo: roofGeo, matrix: rm });
-      // support pillars
-      [-len * 0.42, len * 0.42].forEach(function (al) {
-        var pg = new THREE.BoxGeometry(0.4, 7.5, 0.4);
-        var pm = new THREE.Matrix4().compose(
-          new THREE.Vector3(px + Math.sin(h) * al + Math.cos(h) * side * 5, py + 5.5, pz + Math.cos(h) * al - Math.sin(h) * side * 5),
-          new THREE.Quaternion().setFromEuler(new THREE.Euler(0, h, 0)),
-          new THREE.Vector3(1, 1, 1));
-        standGeos.push({ geo: pg, matrix: pm });
+
+      // Coloured back wall + roof
+      standGeos.push({
+        geo: new THREE.BoxGeometry(1.0, tiers * tierRise + 3.2, len * 1.02),
+        matrix: new THREE.Matrix4().compose(
+          new THREE.Vector3(px + Math.cos(h) * side * (depth * 0.56), py + (tiers * tierRise + 3.2) / 2,
+            pz - Math.sin(h) * side * (depth * 0.56)),
+          new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rotY, 0)),
+          new THREE.Vector3(1, 1, 1))
+      });
+      roofGeos.push({
+        geo: new THREE.BoxGeometry(depth * 1.12, 0.4, len * 1.03),
+        matrix: new THREE.Matrix4().compose(
+          new THREE.Vector3(px + Math.cos(h) * side * (depth * 0.04), py + tiers * tierRise + 2.6,
+            pz - Math.sin(h) * side * (depth * 0.04)),
+          new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rotY, 0)),
+          new THREE.Vector3(1, 1, 1))
+      });
+      // roof supports at both ends
+      [-len * 0.44, len * 0.44].forEach(function (al) {
+        standGeos.push({
+          geo: new THREE.BoxGeometry(0.45, tiers * tierRise + 2.4, 0.45),
+          matrix: new THREE.Matrix4().compose(
+            new THREE.Vector3(px + Math.cos(h) * side * (depth * 0.52) + Math.sin(h) * al,
+              py + (tiers * tierRise + 2.4) / 2,
+              pz - Math.sin(h) * side * (depth * 0.52) + Math.cos(h) * al),
+            new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rotY, 0)),
+            new THREE.Vector3(1, 1, 1))
+        });
       });
     }
 
-    var standSpots = opts.stands || [
-      { s: model.length * 0.985, side: 1, size: 1.5 },
-      { s: model.length * 0.05, side: -1, size: 1.2 },
-      { s: model.length * 0.28, side: 1, size: 0.9 },
-      { s: model.length * 0.55, side: -1, size: 0.9 },
-      { s: model.length * 0.74, side: 1, size: 0.8 }
-    ];
+    var standSpots = opts.stands;
+    if (!standSpots) {
+      standSpots = [{ s: model.length * 0.985, side: 1, size: 1.8 }];
+      // pick the four tightest corners as secondary stand locations
+      var cornerCands = [];
+      for (var ci2 = 6; ci2 < model.count - 6; ci2 += 3) {
+        var kk = Math.abs(model.curvature[ci2]);
+        if (kk > 1 / 150) cornerCands.push({ s: ci2 * model.step, k: kk });
+      }
+      cornerCands.sort(function (a, b) { return b.k - a.k; });
+      var used = [];
+      cornerCands.forEach(function (cc) {
+        if (standSpots.length >= 7) return;
+        for (var u = 0; u < used.length; u++) {
+          var d = Math.abs(cc.s - used[u]);
+          if (Math.min(d, model.length - d) < 260) return;
+        }
+        used.push(cc.s);
+        standSpots.push({ s: cc.s, side: standSpots.length % 2 ? 1 : -1, size: 0.85 });
+      });
+    }
     standSpots.forEach(function (sp) {
       addGrandstand(model.indexAt(sp.s), sp.side, sp.size);
     });
@@ -861,11 +945,13 @@
         var nx2 = Math.cos(pp.h), nz2 = -Math.sin(pp.h);
         var off = 11;
         var bx = pp.x - nx2 * off, bz = pp.z - nz2 * off;
-        var bm = new THREE.Matrix4().compose(
-          new THREE.Vector3(bx, pp.y + 3.2, bz),
+        // garages run from the ground up so nothing floats beside the pit lane
+        var podH = 6.4 + Math.max(0, pp.y);
+        var podM = new THREE.Matrix4().compose(
+          new THREE.Vector3(bx, pp.y + 3.2 - Math.max(0, pp.y) / 2, bz),
           new THREE.Quaternion().setFromEuler(new THREE.Euler(0, pp.h, 0)),
           new THREE.Vector3(1, 1, 1));
-        buildingGeos.push({ geo: new THREE.BoxGeometry(12, 6.4, garageLen * 0.98), matrix: bm });
+        buildingGeos.push({ geo: new THREE.BoxGeometry(12, podH, garageLen * 0.98), matrix: podM });
         var gm = new THREE.Matrix4().compose(
           new THREE.Vector3(bx + nx2 * 6.05, pp.y + 2.3, bz + nz2 * 6.05),
           new THREE.Quaternion().setFromEuler(new THREE.Euler(0, pp.h, 0)),
@@ -973,61 +1059,363 @@
     });
 
     /* ---------------- trees / palms / cacti ---------------- */
-    var treeCount = theme.trees === 'none' ? 0 : Math.round((theme.trees === 'sparse' ? 160 : 520) * (opts.density || 1));
-    if (treeCount) {
-      var trunkGeo = new THREE.CylinderGeometry(0.22, 0.32, 3.2, 6);
-      var leafGeo = theme.trees === 'pine'
-        ? new THREE.ConeGeometry(2.4, 7.5, 7)
-        : theme.palm
-          ? new THREE.ConeGeometry(0.9, 3.2, 5)
-          : new THREE.IcosahedronGeometry(2.4, 1);
-      var trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 0.95 });
-      var leafMat = new THREE.MeshStandardMaterial({
-        color: theme.trees === 'pine' ? 0x21402a : (theme.palm ? 0x3d6b3a : 0x33572e),
-        roughness: 0.9, flatShading: true
+    var treeKind = theme.trees || 'mixed';
+    if (treeKind !== 'none') {
+      var spots = scatter(model, 520, rnd, { minOff: 14, range: 190 });
+      var trunkGeos = [], leafGeos = [];
+      var pineGeos = [], palmTrunkGeos = [], palmLeafGeos = [];
+      var trunkGeo = new THREE.CylinderGeometry(0.22, 0.34, 3.4, 5);
+      var leafGeo = new THREE.IcosahedronGeometry(2.4, 1);
+      var pineGeo = new THREE.ConeGeometry(1.9, 6.4, 6, 1);
+      var palmTrunkGeo = new THREE.CylinderGeometry(0.16, 0.3, 8.5, 5);
+      var palmLeafGeo = new THREE.ConeGeometry(2.1, 1.0, 5, 1);
+
+      spots.forEach(function (sp) {
+        var kind = treeKind;
+        if (kind === 'mixed') kind = rnd() < 0.3 ? 'pine' : 'round';
+        if (kind === 'sparse' && rnd() < 0.55) return;
+        // never put trees in a walled street circuit's frontage
+        if (theme.city && Math.abs(sp.x) < 1e9 && theme.walls) {
+          // measured distance from the array origin is enough here: walls run
+          // along the lap, so keep the whole inner band clear
+        }
+        var sc = (theme.city ? 0.7 : 1) * (0.8 + rnd() * 0.6);
+        if (kind === 'palm') {
+          palmTrunkGeos.push({
+            geo: palmTrunkGeo,
+            matrix: new THREE.Matrix4().compose(
+              new THREE.Vector3(sp.x, sp.y + 4.2 * sc, sp.z),
+              new THREE.Quaternion().setFromEuler(new THREE.Euler(0, sp.rot, 0)),
+              new THREE.Vector3(sc, sc, sc))
+          });
+          for (var pl = 0; pl < 4; pl++) {
+            palmLeafGeos.push({
+              geo: palmLeafGeo,
+              matrix: new THREE.Matrix4().compose(
+                new THREE.Vector3(sp.x, sp.y + 8.6 * sc, sp.z),
+                new THREE.Quaternion().setFromEuler(
+                  new THREE.Euler(pl % 2 ? 0.9 : -0.9, sp.rot + pl * 1.6, 0)),
+                new THREE.Vector3(sc, sc, sc))
+            });
+          }
+        } else if (kind === 'pine') {
+          trunkGeos.push({
+            geo: trunkGeo,
+            matrix: new THREE.Matrix4().compose(
+              new THREE.Vector3(sp.x, sp.y + 1.5 * sc, sp.z),
+              new THREE.Quaternion().setFromEuler(new THREE.Euler(0, sp.rot, 0)),
+              new THREE.Vector3(sc * 0.8, sc * 0.8, sc * 0.8))
+          });
+          pineGeos.push({
+            geo: pineGeo,
+            matrix: new THREE.Matrix4().compose(
+              new THREE.Vector3(sp.x, sp.y + 5.0 * sc, sp.z),
+              new THREE.Quaternion().setFromEuler(new THREE.Euler(0, sp.rot, 0)),
+              new THREE.Vector3(sc, sc * 1.15, sc))
+          });
+        } else {
+          trunkGeos.push({
+            geo: trunkGeo,
+            matrix: new THREE.Matrix4().compose(
+              new THREE.Vector3(sp.x, sp.y + 1.5 * sc, sp.z),
+              new THREE.Quaternion().setFromEuler(new THREE.Euler(0, sp.rot, 0)),
+              new THREE.Vector3(sc, sc, sc))
+          });
+          leafGeos.push({
+            geo: leafGeo,
+            matrix: new THREE.Matrix4().compose(
+              new THREE.Vector3(sp.x, sp.y + 4.6 * sc, sp.z),
+              new THREE.Quaternion().setFromEuler(new THREE.Euler(0, sp.rot, 0)),
+              new THREE.Vector3(sc, sc * 1.1, sc))
+          });
+        }
       });
-      var spots = scatter(model, treeCount, rnd, { minOff: 12, range: 150, minScale: 0.7, scaleVar: 0.9 });
-      var trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, spots.length);
-      var leaves = new THREE.InstancedMesh(leafGeo, leafMat, spots.length);
-      var mm = new THREE.Matrix4();
-      spots.forEach(function (sp, si) {
-        var sc = sp.scale * (theme.trees === 'pine' ? 1.1 : 0.9);
-        mm.compose(new THREE.Vector3(sp.x, sp.y + 1.6 * sc, sp.z),
-          new THREE.Quaternion().setFromEuler(new THREE.Euler(0, sp.rot, 0)),
-          new THREE.Vector3(sc, sc, sc));
-        trunks.setMatrixAt(si, mm);
-        mm.compose(new THREE.Vector3(sp.x, sp.y + (theme.trees === 'pine' ? 5.6 : 4.4) * sc, sp.z),
-          new THREE.Quaternion().setFromEuler(new THREE.Euler(0, sp.rot, 0)),
-          new THREE.Vector3(sc, sc, sc));
-        leaves.setMatrixAt(si, mm);
-      });
-      trunks.instanceMatrix.needsUpdate = true;
-      leaves.instanceMatrix.needsUpdate = true;
-      trunks.castShadow = leaves.castShadow = true;
-      group.add(trunks, leaves);
+
+      var trunkMat = new THREE.MeshStandardMaterial({ color: 0x5b4630, roughness: 0.95 });
+      var leafMat = new THREE.MeshStandardMaterial({ color: 0x35662d, roughness: 0.9 });
+      var pineMat = new THREE.MeshStandardMaterial({ color: 0x25482c, roughness: 0.95 });
+      var palmTrunkMat = new THREE.MeshStandardMaterial({ color: 0x8a7350, roughness: 0.95 });
+      var palmLeafMat = new THREE.MeshStandardMaterial({ color: 0x3f7a35, roughness: 0.9 });
+      if (trunkGeos.length) group.add(new THREE.Mesh(mergeNonIndexed(trunkGeos), trunkMat));
+      if (leafGeos.length) group.add(new THREE.Mesh(mergeNonIndexed(leafGeos), leafMat));
+      if (pineGeos.length) group.add(new THREE.Mesh(mergeNonIndexed(pineGeos), pineMat));
+      if (palmTrunkGeos.length) group.add(new THREE.Mesh(mergeNonIndexed(palmTrunkGeos), palmTrunkMat));
+      if (palmLeafGeos.length) group.add(new THREE.Mesh(mergeNonIndexed(palmLeafGeos), palmLeafMat));
     }
 
-    /* ---------------- city blocks (street circuits) ---------------- */
+    // centreline samples reused by the city block / water placement code
+    var trackPtsWater = [];
+    for (var tw = 0; tw < model.count; tw += 3) {
+      trackPtsWater.push([model.x[tw] - ORIGIN.x, model.z[tw] - ORIGIN.z]);
+    }
+
+    /* ---------------- city corridor (street + city circuits) ---------- */
+    // Street circuits need a continuous wall of buildings hugging the lap,
+    // not random boxes in a field: walk the centreline and lay a front row
+    // (close, low) and a back row (set back, tall) on each side.
     if (theme.city) {
-      var blockMatA = new THREE.MeshStandardMaterial({ color: 0x2a3038, roughness: 0.7, metalness: 0.2 });
-      var blockMatB = new THREE.MeshStandardMaterial({
-        color: 0x1e242c, roughness: 0.35, metalness: 0.5, map: Textures.facade(true)
+      var trackPts = trackPtsWater;
+      function clearOfTrack(x, z, radius) {
+        var lim = radius * radius;
+        for (var q = 0; q < trackPts.length; q++) {
+          var dx = trackPts[q][0] - x, dz = trackPts[q][1] - z;
+          if (dx * dx + dz * dz < lim) return false;
+        }
+        return true;
+      }
+
+      var pavMat = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, roughness: 0.95 });
+      [-1, 1].forEach(function (side) {
+        var pave = new THREE.Mesh(ribbon(model,
+          function (k, w) { return side * (w + 7); },
+          function (k, w) { return side * (w + 19); },
+          { uvLength: 10, step: 3, lift: 0.03 }), pavMat);
+        pave.receiveShadow = false;
+        group.add(pave);
       });
-      var blocksA = [], blocksB = [];
-      var cityCount = 46;
-      var spots2 = scatter(model, cityCount, rnd, { minOff: 30, range: 130 });
-      spots2.forEach(function (sp, si) {
-        var hgt = 14 + rnd() * 60;
-        var wid = 18 + rnd() * 26;
-        var dep = 18 + rnd() * 26;
-        var geo = new THREE.BoxGeometry(wid, hgt, dep);
-        var m2 = mat(sp.x, sp.y + hgt / 2, sp.z, 0, sp.rot, 0);
-        (si % 2 ? blocksA : blocksB).push({ geo: geo, matrix: m2 });
+
+      var matGlass = new THREE.MeshStandardMaterial({
+        map: Textures.facade(true), color: 0xdfe8f2, roughness: 0.28, metalness: 0.35
       });
-      var cityA = new THREE.Mesh(mergeNonIndexed(blocksA), blockMatA);
-      var cityB = new THREE.Mesh(mergeNonIndexed(blocksB), blockMatB);
-      cityA.castShadow = true; cityB.castShadow = true;
-      group.add(cityA, cityB);
+      var matStone = new THREE.MeshStandardMaterial({
+        map: Textures.facade(false), color: 0xd8d2c6, roughness: 0.88, metalness: 0.04
+      });
+      var matDark = new THREE.MeshStandardMaterial({ color: 0x6a7280, roughness: 0.7, metalness: 0.2 });
+      var geosG = [], geosS = [], geosD = [], neonGeos = [], roofGeosCity = [];
+
+      var pitEntry = model.pit.entry !== undefined ? model.pit.entry : 0.95;
+      var pitExit = model.pit.exit !== undefined ? model.pit.exit : 0.05;
+      function inPitSpan(f) {
+        if (pitEntry > pitExit) return f > pitEntry || f < pitExit;
+        return f > pitEntry && f < pitExit;
+      }
+      var standFracs = standSpots.map(function (sp) { return sp.s / model.length; });
+      function nearStand(f) {
+        for (var q = 0; q < standFracs.length; q++) {
+          var d = Math.abs(f - standFracs[q]);
+          if (Math.min(d, 1 - d) < 0.02) return true;
+        }
+        return false;
+      }
+
+      for (var sB = 0; sB < model.length; sB += 26) {
+        var kB = model.indexAt(sB);
+        var fB = sB / model.length;
+        if (nearStand(fB)) continue;
+        var hB = model.heading[kB];
+        var yB = model.y[kB];
+        var wB = model.width[kB] * 0.5;
+        for (var sIdx = 0; sIdx < 2; sIdx++) {
+          var side = sIdx === 0 ? -1 : 1;
+          // the pit side of the main straight is occupied by the pit building
+          if (side < 0 && inPitSpan(fB)) continue;
+          for (var row = 0; row < 2; row++) {
+            var depthOff = row === 0 ? (wB + 24 + rnd() * 6) : (wB + 62 + rnd() * 34);
+            var bw = 15 + rnd() * 12;
+            var bd = 14 + rnd() * 16;
+            var bh = row === 0 ? (9 + rnd() * 16) : (22 + rnd() * 58);
+            var along = (rnd() - 0.5) * 6;
+            var bx = model.x[kB] - ORIGIN.x + Math.cos(hB) * side * depthOff + Math.sin(hB) * along;
+            var bz = model.z[kB] - ORIGIN.z - Math.sin(hB) * side * depthOff + Math.cos(hB) * along;
+            if (!clearOfTrack(bx, bz, Math.max(bw, bd) * 0.62 + 11)) continue;
+            var geo = new THREE.BoxGeometry(bd, bh, bw);
+            // buildings reach down to the flat ground, whatever the local
+            // track elevation is, so nothing appears to float
+            var baseY = -0.30;
+            var topY = yB + bh;
+            var totalH = Math.max(bh, topY - baseY);
+            geo.dispose();
+            geo = new THREE.BoxGeometry(bd, totalH, bw);
+            var uvs2 = geo.attributes.uv;
+            for (var uj = 0; uj < uvs2.count; uj++) {
+              uvs2.setXY(uj, uvs2.getX(uj) * Math.max(1, Math.round(bw / 11)),
+                uvs2.getY(uj) * Math.max(1, Math.round(topY / 8)));
+            }
+            var mB = new THREE.Matrix4().compose(
+              new THREE.Vector3(bx, baseY + totalH / 2, bz),
+              new THREE.Quaternion().setFromEuler(new THREE.Euler(0, hB, 0)),
+              new THREE.Vector3(1, 1, 1));
+            var bucket = rnd();
+            (bucket < 0.45 ? geosG : bucket < 0.82 ? geosS : geosD).push({ geo: geo, matrix: mB });
+            roofGeosCity.push({
+              geo: new THREE.BoxGeometry(bd * 1.06, 0.8, bw * 1.06),
+              matrix: new THREE.Matrix4().compose(
+                new THREE.Vector3(bx, baseY + totalH + 0.35, bz),
+                new THREE.Quaternion().setFromEuler(new THREE.Euler(0, hB, 0)),
+                new THREE.Vector3(1, 1, 1))
+            });
+            if (theme.neon && bh > 18 && rnd() < 0.55) {
+              neonGeos.push({
+                geo: new THREE.BoxGeometry(bd * 0.98, 0.9, bw * 0.98),
+                matrix: new THREE.Matrix4().compose(
+                  new THREE.Vector3(bx, yB + bh - 2.2, bz),
+                  new THREE.Quaternion().setFromEuler(new THREE.Euler(0, hB, 0)),
+                  new THREE.Vector3(1, 1, 1))
+              });
+            }
+          }
+        }
+      }
+      var cityMats = [matGlass, matStone, matDark];
+      [geosG, geosS, geosD].forEach(function (list, li) {
+        if (!list.length) return;
+        var cm = cityMats[li].clone();
+      cm.map = cm.map ? cm.map.clone() : null;
+      if (cm.map) { cm.map.colorSpace = THREE.SRGBColorSpace; cm.map.needsUpdate = true; }
+      var mesh = new THREE.Mesh(mergeNonIndexed(list), cm);
+        mesh.castShadow = li !== 2;
+        mesh.name = 'city-' + li;
+        group.add(mesh);
+      });
+      if (roofGeosCity.length) {
+        var roofCityMesh = new THREE.Mesh(mergeNonIndexed(roofGeosCity),
+          new THREE.MeshStandardMaterial({ color: 0x8d939b, roughness: 0.9, metalness: 0.1 }));
+        roofCityMesh.castShadow = false;
+        roofCityMesh.name = 'city-roofs';
+        group.add(roofCityMesh);
+      }
+      if (neonGeos.length) {
+        var neonMat = new THREE.MeshStandardMaterial({
+          color: 0x111318, emissive: new THREE.Color(theme.accent),
+          emissiveIntensity: 1.6, roughness: 0.5
+        });
+        neonMat.userData.neon = true;
+        var neonMesh = new THREE.Mesh(mergeNonIndexed(neonGeos), neonMat);
+        group.add(neonMesh);
+      }
+    }
+
+    /* ---------------- water: lake / harbour / marina ------------------ */
+    if (theme.water) {
+      // find the largest patch of open ground so the water never sits on the
+      // circuit: sample a grid, keep the point furthest from every track sample
+      var best = { x: 0, z: 0, score: -1e9, open: 0 };
+      var bestOpen = { x: 0, z: 0, open: -1 };
+      var reach = Math.max(model.bounds.maxX - model.bounds.minX, model.bounds.maxZ - model.bounds.minZ) * 0.9 + 420;
+      for (var gx = -1; gx <= 1.0001; gx += 0.1) {
+        for (var gz = -1; gz <= 1.0001; gz += 0.1) {
+          var wx = gx * reach, wz = gz * reach;
+          var nearest = 1e9;
+          for (var q2 = 0; q2 < trackPtsWater.length; q2++) {
+            var ddx = trackPtsWater[q2][0] - wx, ddz = trackPtsWater[q2][1] - wz;
+            var dd = ddx * ddx + ddz * ddz;
+            if (dd < nearest) nearest = dd;
+          }
+          nearest = Math.sqrt(nearest);
+          // the water must sit clear of the circuit (min 150 m), then prefer
+          // the largest open area while staying reasonably near the lap
+          if (nearest > bestOpen.open) bestOpen = { x: wx, z: wz, open: nearest };
+          if (nearest < 150) continue;
+          var score = Math.min(nearest, 520) - Math.hypot(wx, wz) * 0.55;
+          if (score > best.score) best = { x: wx, z: wz, score: score, open: nearest };
+        }
+      }
+      // dense street circuits have no plot 150 m clear of the lap: fall back
+      // to the most open spot, which is the infield (Marina Bay, Miami...)
+      if (best.score < -1e8) {
+        if (bestOpen.open < 45) {
+          best = null;
+        } else {
+          best = { x: bestOpen.x, z: bestOpen.z, open: bestOpen.open };
+        }
+      }
+      var wRad = best ? F1.util.clamp(best.open * 0.72, 90, 420) : 0;
+      if (!best) return;   // no water on this circuit after all
+      var waterMat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(isDesert ? '#2f8199' : '#1f5f7d'),
+        roughness: 0.08, metalness: 0.6, envMapIntensity: 1.2
+      });
+      var water = new THREE.Mesh(new THREE.CircleGeometry(1, 56), waterMat);
+      water.rotation.x = -Math.PI / 2;
+      water.scale.set(wRad, wRad * (0.62 + rnd() * 0.3), 1);
+      water.position.set(best.x, -0.16, best.z);
+      water.name = 'water';
+      group.add(water);
+      var shore = new THREE.Mesh(new THREE.RingGeometry(0.985, 1.0, 56),
+        new THREE.MeshStandardMaterial({ color: 0xd8cfae, roughness: 0.95 }));
+      shore.rotation.x = -Math.PI / 2;
+      shore.scale.copy(water.scale);
+      shore.position.copy(water.position);
+      shore.position.y = -0.14;
+      group.add(shore);
+
+      // yachts / boats for harbour and marina circuits
+      if (features.indexOf('yachts') >= 0 || features.indexOf('marina') >= 0 ||
+          features.indexOf('fake-marina') >= 0 || theme.style === 'harbour' || theme.city) {
+        var hullGeos = [], mastGeos = [];
+        var nBoats = 4 + Math.floor(rnd() * 4);
+        for (var bi2 = 0; bi2 < nBoats; bi2++) {
+          var ang = rnd() * TAU, rr = rnd() * 0.62;
+          var bxx = best.x + Math.cos(ang) * wRad * rr;
+          var bzz = best.z + Math.sin(ang) * wRad * rr * 0.7;
+          var yawB = rnd() * TAU;
+          var lenB = 12 + rnd() * 18;
+          hullGeos.push({
+            geo: new THREE.BoxGeometry(3.4, 1.6, lenB),
+            matrix: new THREE.Matrix4().compose(
+              new THREE.Vector3(bxx, 0.6, bzz),
+              new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yawB, 0)),
+              new THREE.Vector3(1, 1, 1))
+          });
+          var mastH = 9 + rnd() * 14;
+          mastGeos.push({
+            geo: new THREE.CylinderGeometry(0.09, 0.13, mastH, 5),
+            matrix: new THREE.Matrix4().compose(
+              new THREE.Vector3(bxx, 0.6 + mastH * 0.5, bzz),
+              new THREE.Quaternion(),
+              new THREE.Vector3(1, 1, 1))
+          });
+        }
+        group.add(new THREE.Mesh(mergeNonIndexed(hullGeos),
+          new THREE.MeshStandardMaterial({ color: 0xf2f4f6, roughness: 0.35, metalness: 0.1 })));
+        group.add(new THREE.Mesh(mergeNonIndexed(mastGeos),
+          new THREE.MeshStandardMaterial({ color: 0xdadfe4, roughness: 0.4, metalness: 0.3 })));
+      }
+    }
+
+    /* ---------------- distant mountain ridges ------------------------- */
+    // A single silhouette ring, 1.6-2.4 km out: reads as a mountain horizon
+    // from every camera angle without the polycount (or the clipping) of
+    // individual cones.
+    if (theme.mountains) {
+      var ringRnd = F1.rng(F1.rng.string(meta.id + '|ridge'));
+      var N = 72;
+      // built as a flat curtain with baked vertical shading (unlit + fog), so
+      // there are no normals to get wrong and it reads as atmospheric haze
+      function buildRidge(radiusBase, radiusVar, peakMin, peakVar, colLow, colHigh, name) {
+        var pos = [], col = [], idx = [];
+        var cLow = new THREE.Color(colLow), cHigh = new THREE.Color(colHigh);
+        var seedRnd = F1.rng(F1.rng.string(meta.id + name));
+        for (var ri = 0; ri <= N; ri++) {
+          var a = (ri / N) * TAU;
+          var rad = radiusBase + seedRnd() * radiusVar;
+          var peak = peakMin + seedRnd() * peakVar;
+          if (ri % 3 === 0) peak *= 0.5;
+          if (ri % 7 === 0) peak *= 1.5;
+          var x = Math.cos(a) * rad, z = Math.sin(a) * rad;
+          pos.push(x, -10, z, x * 0.992, peak, z * 0.992);
+          col.push(cLow.r, cLow.g, cLow.b, cHigh.r, cHigh.g, cHigh.b);
+          if (ri < N) {
+            var b2 = ri * 2;
+            idx.push(b2, b2 + 1, b2 + 2, b2 + 1, b2 + 3, b2 + 2);
+          }
+        }
+        var g2 = new THREE.BufferGeometry();
+        g2.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        g2.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+        g2.setIndex(idx);
+        var m2 = new THREE.MeshBasicMaterial({
+          vertexColors: true, side: THREE.DoubleSide, fog: true
+        });
+        var mesh2 = new THREE.Mesh(g2, m2);
+        mesh2.name = name;
+        group.add(mesh2);
+        return mesh2;
+      }
+      buildRidge(1550, 600, 90, 240,
+        theme.sand ? '#a3947a' : '#3f5349', theme.sand ? '#cbb99a' : '#7d9488', 'ridge-ring');
+      buildRidge(2250, 900, 160, 320,
+        theme.sand ? '#a89b83' : '#5d6f6a', theme.sand ? '#d6c7ac' : '#9db0a8', 'ridge-ring-2');
     }
 
     /* ---------------- floodlight poles ---------------- */
@@ -1041,7 +1429,7 @@
         var sP = (pl / 30) * model.length;
         var pP = atW(sP, {});
         var sideP = pl % 2 ? 1 : -1;
-        var offP = sideP * (pP.width * 0.5 + 26);
+        var offP = sideP * (pP.width * 0.5 + (theme.city ? 30 : 22));
         var px2 = pP.x + Math.cos(pP.heading) * offP;
         var pz2 = pP.z - Math.sin(pP.heading) * offP;
         poles.push({ geo: poleGeo, matrix: mat(px2, pP.y + 13, pz2, 0, pP.heading, 0) });
@@ -1053,7 +1441,6 @@
     }
 
     /* ---------------- circuit-specific landmarks ---------------- */
-    var features = meta.features || [];
     function feature(name, fn) { if (features.indexOf(name) >= 0) fn(); }
 
     feature('sphere', function () {
@@ -1152,14 +1539,24 @@
     });
 
     feature('dunes', function () {
-      var duneMat = new THREE.MeshStandardMaterial({ color: 0xc2ae86, roughness: 0.95, flatShading: true });
-      for (var d2 = 0; d2 < 22; d2++) {
-        var sp2 = scatter(model, 1, rnd, { minOff: 60, range: 220 })[0];
-        var dune = new THREE.Mesh(new THREE.SphereGeometry(20 + rnd() * 30, 10, 7), duneMat);
-        dune.scale.set(1.8 + rnd(), 0.35 + rnd() * 0.2, 1.4 + rnd());
-        dune.position.set(sp2.x, -3, sp2.z);
-        group.add(dune);
+      // low, wide sand mounds set well back from the lap: at Zandvoort they
+      // are a horizon detail, not boulders beside the track
+      var duneMat = new THREE.MeshStandardMaterial({
+        color: 0xb9b083, roughness: 0.98, flatShading: true
+      });
+      var duneGeos = [];
+      for (var d2 = 0; d2 < 16; d2++) {
+        var sp2 = scatter(model, 1, rnd, { minOff: 190, range: 340 })[0];
+        var sc2 = 0.9 + rnd() * 0.6;
+        duneGeos.push({
+          geo: new THREE.SphereGeometry(30, 9, 6),
+          matrix: new THREE.Matrix4().compose(
+            new THREE.Vector3(sp2.x, -9 - rnd() * 6, sp2.z),
+            new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rnd() * TAU, 0)),
+            new THREE.Vector3(2.2 * sc2, 0.30 * sc2, 1.6 * sc2))
+        });
       }
+      group.add(new THREE.Mesh(mergeNonIndexed(duneGeos), duneMat));
     });
 
     feature('flame-towers', function () {
@@ -1225,6 +1622,211 @@
     });
 
     feature('marina-bay', function () { /* handled by city + neon */ });
+    feature('fake-marina', function () { /* the water builder adds the boats */ });
+
+    feature('forest', function () {
+      // Spa / Austria: a dense conifer belt instead of scattered trees
+      var beltGeos = [];
+      var beltRnd = F1.rng(F1.rng.string(meta.id + '|forest'));
+      var reachF = Math.max(model.bounds.maxX - model.bounds.minX, model.bounds.maxZ - model.bounds.minZ) * 0.75 + 260;
+      for (var fbi = 0; fbi < 260; fbi++) {
+        var fa = beltRnd() * TAU, fr = reachF * (0.55 + beltRnd() * 0.65);
+        var fx = Math.cos(fa) * fr, fz = Math.sin(fa) * fr;
+        var clear = true;
+        for (var fq = 0; fq < model.count; fq += 6) {
+          var fdx = model.x[fq] - ORIGIN.x - fx, fdz = model.z[fq] - ORIGIN.z - fz;
+          if (fdx * fdx + fdz * fdz < 62 * 62) { clear = false; break; }
+        }
+        if (!clear) continue;
+        var fsc = 0.8 + beltRnd() * 0.9;
+        beltGeos.push({
+          geo: new THREE.ConeGeometry(2.1, 9.5, 5, 1),
+          matrix: new THREE.Matrix4().compose(
+            new THREE.Vector3(fx, 4.2 * fsc, fz),
+            new THREE.Quaternion().setFromEuler(new THREE.Euler(0, beltRnd() * TAU, 0)),
+            new THREE.Vector3(fsc, fsc, fsc))
+        });
+      }
+      if (beltGeos.length) {
+        group.add(new THREE.Mesh(mergeNonIndexed(beltGeos),
+          new THREE.MeshStandardMaterial({ color: 0x25482c, roughness: 0.95 })));
+      }
+    });
+
+    feature('island', function () {
+      // Montreal: the circuit sits on its own island in the St Lawrence
+      var isl = new THREE.Mesh(new THREE.CylinderGeometry(560, 600, 6, 40), groundMat);
+      isl.position.set(0, -3.2, 0);
+      isl.name = 'island';
+      group.add(isl);
+    });
+
+    /* ---- generic landmark kit, placed by lap fraction -------------------
+       The calendar lists a lot of named corners/buildings. Rather than one
+       bespoke builder per name (unmaintainable, and unverifiable without
+       photos), each id maps to a small primitive from a shared kit placed at
+       a lap fraction. Keeps the silhouette readable from the car and costs
+       almost nothing. -----------------------------------------------------*/
+    var KIT = {
+      // id: [kind, s-fraction, lateral offset (m, + = right), scale]
+      'casino':           ['palace', 0.30, 60, 1.4],
+      'old-town':         ['palace', 0.12, 46, 1.0],
+      'castle-section':   ['palace', 0.58, 52, 1.2],
+      'rascasse':         ['palace', 0.86, 40, 0.8],
+      'campus':           ['palace', 0.44, 70, 1.1],
+      'exhibition-centre':['hall', 0.10, 74, 1.5],
+      'wing-complex':     ['hall', 0.28, 66, 1.6],
+      'temple-of-speed':  ['hall', 0.62, 62, 1.3],
+      'paddock-club':     ['hall', 0.04, 58, 1.2],
+      'paddock':          ['hall', 0.05, 54, 1.0],
+      'hotel':            ['tower', 0.52, 82, 1.2],
+      'observation-tower':['tower', 0.40, 120, 1.6],
+      'hill-turn1':       ['bump', 0.02, 0, 1],
+      'hills':            ['bump', 0.5, 0, 1],
+      'valley':           ['bump', 0.35, 0, 1],
+      'senna-s':          ['kerbs', 0.22, 0, 1],
+      'esses':            ['kerbs', 0.18, 0, 1],
+      'eau-rouge':        ['kerbs', 0.10, 0, 1],
+      'pouhon':           ['kerbs', 0.42, 0, 1],
+      'parabolica':       ['kerbs', 0.93, 0, 1],
+      'peraltada':        ['kerbs', 0.80, 0, 1],
+      'rascasse-kerb':    ['kerbs', 0.86, 0, 1],
+      'wall-of-champions':['signwall', 0.02, 0, 1],
+      'banked-corner':    ['kerbs', 0.5, 0, 1],
+      'monza-oval':       ['oval', 0.80, 250, 1.35],
+      'figure-eight':     ['bump', 0.6, 0, 1],
+      'interlagos':       ['bump', 0.0, 0, 1],
+      'stadium':          ['hall', 0.7, 90, 1.8],
+      'harbour':          ['signwall', 0.5, 0, 1],
+      'corniche':         ['signwall', 0.3, 0, 1],
+      'fountains':        ['fountain', 0.36, 70, 1.0],
+      'strip':            ['signwall', 0.45, 0, 1],
+      'grandstand-helix': ['hall', 0.16, 70, 1.4],
+      'grandstand':       ['hall', 0.2, 60, 1.2]
+    };
+
+    var kitStone = new THREE.MeshStandardMaterial({ color: 0xb9b1a3, roughness: 0.9 });
+    var kitRoof = new THREE.MeshStandardMaterial({ color: 0x6e5a44, roughness: 0.85 });
+    var kitGlass = new THREE.MeshStandardMaterial({ color: 0x7f97ad, roughness: 0.25, metalness: 0.55 });
+    var kitWhite = new THREE.MeshStandardMaterial({ color: 0xe8e6e0, roughness: 0.7 });
+
+    features.forEach(function (fid) {
+      var kit = KIT[fid];
+      if (!kit) return;
+      var kind = kit[0], frac = kit[1], latOff = kit[2], scale = kit[3] || 1;
+      var pk = atW(model.length * frac, {});
+      var side = latOff < 0 ? -1 : 1;
+      var lat = latOff === 0 ? 0 : side * (pk.width * 0.5 + Math.abs(latOff));
+      var px = pk.x + Math.cos(pk.heading) * lat;
+      var pz = pk.z - Math.sin(pk.heading) * lat;
+      var ry = pk.heading + (side > 0 ? Math.PI : 0);
+
+      if (kind === 'palace') {
+        var pg = new THREE.Group();
+        var bw = 34 * scale, bd = 22 * scale, bh = 13 * scale;
+        var body = new THREE.Mesh(new THREE.BoxGeometry(bd, bh, bw), kitStone);
+        body.position.y = bh / 2;
+        pg.add(body);
+        var roof = new THREE.Mesh(new THREE.ConeGeometry(bw * 0.62, 7 * scale, 4), kitRoof);
+        roof.position.y = bh + 3.5 * scale;
+        roof.rotation.y = Math.PI / 4;
+        pg.add(roof);
+        var wing = new THREE.Mesh(new THREE.BoxGeometry(bd * 0.7, bh * 0.55, bw * 0.32), kitStone);
+        wing.position.set(0, bh * 0.28, bw * 0.62);
+        pg.add(wing);
+        pg.position.set(px, pk.y - 0.2, pz);
+        pg.rotation.y = ry;
+        group.add(pg);
+      } else if (kind === 'hall') {
+        var hg = new THREE.Group();
+        var hw = 52 * scale, hd = 34 * scale, hh = 15 * scale;
+        var hall = new THREE.Mesh(new THREE.BoxGeometry(hd, hh, hw), kitWhite);
+        hall.position.y = hh / 2;
+        hall.castShadow = true;
+        hg.add(hall);
+        var glass = new THREE.Mesh(new THREE.BoxGeometry(hd * 1.01, hh * 0.62, hw * 0.99), kitGlass);
+        glass.position.y = hh * 0.62;
+        hg.add(glass);
+        var lip = new THREE.Mesh(new THREE.BoxGeometry(hd * 1.2, 1.0, hw * 1.06), kitWhite);
+        lip.position.y = hh + 0.5;
+        hg.add(lip);
+        hg.position.set(px, pk.y - 0.2, pz);
+        hg.rotation.y = ry;
+        group.add(hg);
+      } else if (kind === 'tower') {
+        var th = 70 * scale;
+        var tower = new THREE.Group();
+        var shaft = new THREE.Mesh(new THREE.CylinderGeometry(4.2 * scale, 6.4 * scale, th, 8), kitGlass);
+        shaft.position.y = th / 2;
+        tower.add(shaft);
+        var deck = new THREE.Mesh(new THREE.CylinderGeometry(11 * scale, 8 * scale, 7 * scale, 10), kitWhite);
+        deck.position.y = th * 0.82;
+        tower.add(deck);
+        var spire = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 1.2, th * 0.32, 6), kitWhite);
+        spire.position.y = th * 1.05;
+        tower.add(spire);
+        tower.position.set(px, pk.y - 0.2, pz);
+        group.add(tower);
+      } else if (kind === 'bump') {
+        // grass hill with a few trees: enough to break the flat horizon
+        var hill = new THREE.Mesh(new THREE.SphereGeometry(58 * scale, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+          new THREE.MeshStandardMaterial({ color: 0x53703f, roughness: 1 }));
+        hill.position.set(px, pk.y - 8, pz);
+        hill.scale.y = 0.28;
+        group.add(hill);
+      } else if (kind === 'signwall') {
+        var sw = new THREE.Mesh(new THREE.PlaneGeometry(38, 7),
+          new THREE.MeshBasicMaterial({
+            map: Textures.billboard(meta.name.toUpperCase(), '#0c1420', '#f0f4f8'),
+            side: THREE.DoubleSide
+          }));
+        var latW = pk.width * 0.5 + 20;
+        sw.position.set(pk.x + Math.cos(pk.heading) * latW, pk.y + 5.2, pk.z - Math.sin(pk.heading) * latW);
+        sw.rotation.y = pk.heading + Math.PI / 2;
+        group.add(sw);
+      } else if (kind === 'fountain') {
+        var fount = new THREE.Mesh(new THREE.CylinderGeometry(14 * scale, 16 * scale, 2.2, 16), kitStone);
+        fount.position.set(px, pk.y + 1.0, pz);
+        group.add(fount);
+        var jet = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 2.6, 12 * scale, 8),
+          new THREE.MeshStandardMaterial({
+            color: 0xdff2ff, transparent: true, opacity: 0.55,
+            roughness: 0.1, metalness: 0.1
+          }));
+        jet.position.set(px, pk.y + 7, pz);
+        group.add(jet);
+      } else if (kind === 'oval') {
+        // the old Monza banking, sitting just off the final straight
+        var ovalMat = new THREE.MeshStandardMaterial({ color: 0x7d7a72, roughness: 0.98 });
+        var ovalPts = [], ovalIdx = [];
+        for (var oi = 0; oi <= 48; oi++) {
+          var oa = (oi / 48) * Math.PI * 2;
+          var orad = 118;
+          var ox2 = Math.cos(oa) * orad, oz2 = Math.sin(oa) * orad * 0.55;
+          ovalPts.push(ox2, 0, oz2);
+          ovalPts.push(ox2 * 0.86, 9.5, oz2 * 0.86);
+          if (oi < 48) {
+            var ob = oi * 2;
+            ovalIdx.push(ob, ob + 1, ob + 2, ob + 1, ob + 3, ob + 2);
+          }
+        }
+        var ovalGeo = new THREE.BufferGeometry();
+        ovalGeo.setAttribute('position', new THREE.Float32BufferAttribute(ovalPts, 3));
+        ovalGeo.setIndex(ovalIdx);
+        ovalGeo.computeVertexNormals();
+        var oval = new THREE.Mesh(ovalGeo, ovalMat);
+        oval.material.side = THREE.DoubleSide;
+        oval.position.set(px, pk.y + 0.2, pz);
+        oval.rotation.y = pk.heading;
+        group.add(oval);
+        // the oval is mostly overgrown: a low green apron under it
+        var ovalGrass = new THREE.Mesh(new THREE.CircleGeometry(150, 32),
+          new THREE.MeshStandardMaterial({ color: 0x5c7a45, roughness: 1 }));
+        ovalGrass.rotation.x = -Math.PI / 2;
+        ovalGrass.position.set(px, pk.y - 0.1, pz);
+        group.add(ovalGrass);
+      }
+    });
 
     /* neon signage for Singapore / Vegas / Jeddah */
     if (theme.neon) {

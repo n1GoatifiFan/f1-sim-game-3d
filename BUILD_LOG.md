@@ -170,13 +170,63 @@ F1.world.build(model, meta, opts) ->
 F1.world.minimapPath(model, w, h, pad) -> {pts, toScreen(x,z)}
 ```
 
+**Environment polish pass (second half of Section 2)**
+
+The first pass proved the pipeline but the world still read as "boxes in a
+field". This pass rebuilt the scenery layer so each circuit has a recognisable
+character, while staying inside the draw-call and triangle budget.
+
+* **City corridor** (9 circuits) — a continuous street canyon instead of random
+  blocks: front row hugging the track at ~24 m, back row set back at ~62 m,
+  sidewalk aprons between track edge and buildings, facade UVs scaled so window
+  size stays constant regardless of building size, roof caps, and accent-coloured
+  LED crown strips on neon circuits. Blocks are skipped along the pit straight
+  (the pit building owns that side) and behind grandstands.
+* **Street surfaces** — street/harbour circuits get an asphalt/concrete verge
+  between the track and the walls; only park/desert circuits get grass or sand.
+* **Water** — lake/harbour/marina sites are chosen by scanning a grid for the
+  largest plot at least 150 m clear of the lap (falling back to the most open
+  infield plot, and skipping water entirely on dense street circuits where
+  there is no room). Adds shoreline ring and, on harbour/marina/city circuits,
+  moored yachts with masts.
+* **Ridges** — a 72-segment silhouette ring (two depth layers, baked vertical
+  gradient, unlit, fogged) replaces the cone mountains: a proper horizon from
+  every camera, and it never clips.
+* **Terrain** — track elevation data is now re-based so the lowest point of the
+  lap sits at y = 0. Circuits that climb (Spa +36 m, Monaco +40 m, Austria,
+  COTA…) get an embankment ribbon blending the verge down to the flat ground, so
+  nothing floats and the ground plane is continuous.
+* **Grandstands** — proper tiered stands (8 decks climbing away from the track,
+  58 m long, roof + back wall + supports) placed automatically: one large main
+  straight stand plus up to six secondary stands at the tightest corners, spaced
+  at least 260 m apart. Instanced crowd sits on the decks. Stand material
+  changed from near-black to light concrete so it reads from a distance.
+* **Pit building** — garage pods now run to the ground instead of hovering on
+  elevated circuits.
+* **Trees** — four proper kinds (round, pine, palm, cypress belt) with trunks,
+  merged per kind; palm fronds are a second merged mesh. The `forest` feature
+  adds a dense conifer belt around Spa/Austria.
+* **Landmarks** — a compact kit maps the calendar's 40 named features to a
+  handful of primitives (palace, hall, tower, hotel, hill, sign wall, fountain,
+  oval) placed by lap fraction. Monza gets the abandoned oval banking beside
+  the lap; Montreal gets its island; desert circuits get dunes set well back.
+* **Circuit themes corrected** — Montreal, Interlagos and Mexico City were tagged
+  as downtown street circuits; they are park circuits (with the city on the
+  horizon), so they no longer build a city canyon over the infield.
+* **Trackside camera** — now a fixed TV-style rig: 22 m back from the barrier,
+  13.5 m up, framing 55 m down the track, starting on the pit straight so the
+  main grandstand and pit building are in shot.
+
 **Exit test** (headless Chromium, WebGL2/SwiftShader, `file://`)
-- All 24 circuits build and render: 43–98 draw calls, 23 k–134 k triangles.
+- All 24 circuits build and render: **45–100 draw calls, 41 k–90 k triangles**
+  (budget was < 400 calls). Scene JS cost per frame is < 0.05 ms; the headless
+  SwiftShader software rasteriser is the only bottleneck in CI, not the game.
 - Track lengths: 24/24 within 0.12 %; `node tools/gen_circuits.js --check` → 24/24 OK.
 - No page errors or console errors on any circuit; the only console output is
   Three.js's r150 UMD deprecation notice.
 - Visual check: orbit contact sheet (all 24), plus flyover/trackside/night captures
-  for Monza, Spa and Singapore.
+  for Monza, Monaco, Spa, Zandvoort, Bahrain, Las Vegas, Singapore, Canada, Mexico.
+- `node tools/gen_circuits.js --check` → 24 circuits, worst length error 0.112 %, all OK.
 
 ---
 

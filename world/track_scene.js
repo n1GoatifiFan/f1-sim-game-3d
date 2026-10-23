@@ -59,7 +59,9 @@
         yaw: 0.6, pitch: 0.95, dist: Math.max(300, span * 1.15)
       };
       var fly = { s: 0, speed: 55, height: 14, look: 55 };
-      var trackside = { s: track.length * 0.02, side: 1 };
+      // stand the trackside camera on the pit side, looking across at the
+      // main grandstand (side +1), which is the shot people recognise
+      var trackside = { s: track.length * 0.94, side: -1 };
       var mode = opts.mode || 'flyover';
 
       function setCameraMode(m) {
@@ -121,14 +123,19 @@
             p.z - Math.cos(h) * 26 - Math.sin(h) * 9);
           camera.lookAt(lookAt.x, lookAt.y + 1.5, lookAt.z);
         } else if (mode === 'trackside') {
-          trackside.s = (trackside.s + dt * 3) % track.length;
+          // fixed camera rig: stands back from the barrier, above the
+          // catch-fencing line, framed down the track like a TV camera
+          trackside.s = (trackside.s + dt * 2.2) % track.length;
           var pt = track.at(trackside.s, {});
           pt.x -= track.origin.x; pt.z -= track.origin.z;
-          var lat = trackside.side * (pt.width * 0.5 + 14);
-          camera.position.set(pt.x + Math.cos(pt.heading) * lat, pt.y + 4.2, pt.z - Math.sin(pt.heading) * lat);
-          var nxt = track.at((trackside.s + 18) % track.length, {});
+          var lat = trackside.side * (pt.width * 0.5 + 22);
+          camera.position.set(
+            pt.x + Math.cos(pt.heading) * lat,
+            pt.y + 13.5,
+            pt.z - Math.sin(pt.heading) * lat);
+          var nxt = track.at((trackside.s + 55) % track.length, {});
           nxt.x -= track.origin.x; nxt.z -= track.origin.z;
-          camera.lookAt(nxt.x, nxt.y + 1.2, nxt.z);
+          camera.lookAt(nxt.x, nxt.y + 1.0, nxt.z);
         } else {
           var cx = Math.sin(orbit.yaw) * Math.cos(orbit.pitch) * orbit.dist;
           var cz = Math.cos(orbit.yaw) * Math.cos(orbit.pitch) * orbit.dist;
