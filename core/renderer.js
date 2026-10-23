@@ -44,7 +44,7 @@
     R.renderer.setClearColor(0x05070b, 1);
     if (THREE.SRGBColorSpace !== undefined) R.renderer.outputColorSpace = THREE.SRGBColorSpace;
     R.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    R.renderer.toneMappingExposure = 0.95;
+    R.renderer.toneMappingExposure = 1.0;
     R.renderer.shadowMap.enabled = !!R.quality.shadows;
     R.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     R.renderer.info.autoReset = false;

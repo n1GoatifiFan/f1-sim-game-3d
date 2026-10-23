@@ -75,7 +75,7 @@
     root.innerHTML = '';
     App.current = screen;
     App.currentName = name;
-    root.className = 'screen screen-' + name;
+    root.className = 'screen screen-' + name + (screen.noScrim ? ' no-scrim' : '');
     var node = screen.mount(root, params || {});
     if (node && node.parentNode !== root) root.appendChild(node);
     root.classList.add('visible');
@@ -91,6 +91,15 @@
 
   App.setScene = function (api) {
     App.sceneApi = api;
+  };
+
+  /* ------------------------------------------------------------------ */
+  /* track preview (Section 2) / race session (Section 3+)              */
+  /* ------------------------------------------------------------------ */
+  App.currentSession = null;
+
+  App.startQuickRace = function (params) {
+    App.show('track-preview', params);
   };
 
   /* ------------------------------------------------------------------ */

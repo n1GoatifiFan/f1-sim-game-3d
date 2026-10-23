@@ -99,6 +99,11 @@ button { font-family: inherit; color: inherit; }
   background: linear-gradient(90deg, rgba(4,6,9,0.94) 0%, rgba(4,6,9,0.72) 38%, rgba(4,6,9,0.12) 62%, rgba(4,6,9,0.55) 100%);
 }
 .screen.no-scrim::before { display: none; }
+/* the 3D stage keeps a soft left-hand scrim so the info panel stays legible */
+.screen.no-scrim::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, rgba(4,6,9,0.55) 0%, rgba(4,6,9,0.28) 26%, rgba(4,6,9,0) 42%);
+}
 /* content-heavy screens: uniform dark scrim so the 3D stage never fights text */
 .screen-quick-race::before,
 .screen-settings::before,
@@ -386,4 +391,5 @@ input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; background: v
   .menu-title { font-size: 44px; }
   .btn-menu .sub { display: none; }
   .screen::before { background: linear-gradient(180deg, rgba(4,6,9,0.9), rgba(4,6,9,0.6) 45%, rgba(4,6,9,0.85)); }
+  .screen.no-scrim::before { display: none; }
 }

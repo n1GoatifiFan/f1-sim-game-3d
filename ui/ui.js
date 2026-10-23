@@ -584,6 +584,91 @@
   };
 
   /* ------------------------------------------------------------------ */
+  /* track preview — proves the circuit + environment pipeline           */
+  /* ------------------------------------------------------------------ */
+  F1.screens['track-preview'] = {
+    noScrim: true,          // full-screen 3D: only the info panel darkens anything
+    mount: function (root, params) {
+      var circuitId = params.circuit || 'monza';
+      var meta = D.getCircuitMeta(circuitId);
+      var wrap = U.node('div', 'screen-inner no-scrim');
+
+      var api = null;
+      var loading = U.node('div', 'stub');
+      loading.innerHTML = '<span class="build-chip">Loading circuit</span><h2>' + esc(meta.official) + '</h2>' +
+        '<p>' + esc(meta.blurb) + '</p>';
+      wrap.appendChild(loading);
+      root.appendChild(wrap);
+
+      setTimeout(function () {
+        try {
+          api = F1.trackScene.create(circuitId, {});
+        } catch (e) {
+          loading.innerHTML = '<h2>Could not build circuit</h2><p>' + esc(e.message) + '</p>';
+          console.error(e);
+          return;
+        }
+        F1.app.currentSession = api;
+        F1.app.setScene(api);
+        wrap.innerHTML = '';
+
+        var head = U.header({
+          title: meta.name, sub: meta.official + ' \u00b7 ' + (meta.length / 1000).toFixed(3) + ' km',
+          backLabel: 'Circuits',
+          onBack: function () {
+            F1.app.currentSession = null;
+            F1.app.show('quick-race');
+          }
+        });
+        head.style.pointerEvents = 'auto';
+        wrap.appendChild(head);
+
+        var info = U.node('div', 'panel pad');
+        info.style.position = 'absolute';
+        info.style.left = '38px';
+        info.style.bottom = '26px';
+        info.style.width = '330px';
+        info.style.pointerEvents = 'auto';
+        info.innerHTML =
+          '<h3 class="panel-title">Session preview</h3>' +
+          '<div class="setting-row" style="padding:6px 0"><span class="muted" style="flex:1">Lap length</span><b>' + (api.track.length / 1000).toFixed(3) + ' km</b></div>' +
+          '<div class="setting-row" style="padding:6px 0"><span class="muted" style="flex:1">Samples</span><b>' + api.track.count + '</b></div>' +
+          '<div class="setting-row" style="padding:6px 0"><span class="muted" style="flex:1">Sectors</span><b>' + api.track.sectors.map(function (x) { return Math.round(x * 100) + '%'; }).join(' / ') + '</b></div>' +
+          '<div class="setting-row" style="padding:6px 0"><span class="muted" style="flex:1">Boost zones</span><b>' + api.track.drs.length + '</b></div>' +
+          '<div class="setting-row" style="padding:6px 0"><span class="muted" style="flex:1">Time of day</span><b>' + esc(meta.timeOfDay) + '</b></div>' +
+          '<div class="setting-row" style="padding:6px 0"><span class="muted" style="flex:1">Data</span><b>' + (api.track.source === 'tum' ? 'surveyed' : 'traced') + '</b></div>' +
+          '<div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">' +
+            '<button class="btn small" id="cam-fly">Flyover</button>' +
+            '<button class="btn small" id="cam-orbit">Orbit</button>' +
+            '<button class="btn small" id="cam-side">Trackside</button>' +
+          '</div>' +
+          '<p class="muted" style="font-size:10.5px;line-height:1.5;margin:12px 0 0">' +
+            'Driving arrives in Section 3. Use the buttons or drag / scroll in orbit mode.' +
+          '</p>';
+        wrap.appendChild(info);
+        var camBtns = info.querySelectorAll('button');
+        function mark(active) {
+          camBtns.forEach(function (b) { b.classList.toggle('primary', b === active); });
+        }
+        info.querySelector('#cam-fly').addEventListener('click', function (e) { api.setCameraMode('flyover'); mark(e.target); });
+        info.querySelector('#cam-orbit').addEventListener('click', function (e) { api.setCameraMode('orbit'); mark(e.target); });
+        info.querySelector('#cam-side').addEventListener('click', function (e) { api.setCameraMode('trackside'); mark(e.target); });
+        mark(info.querySelector('#cam-fly'));
+      }, 60);
+
+      return wrap;
+    },
+    unmount: function () {
+      var api = F1.app.currentSession;
+      if (api && api.destroy) {
+        try { api.destroy(); } catch (e) { console.error(e); }
+      }
+      F1.app.currentSession = null;
+      F1.app.setScene(null);
+    }
+  };
+
+  /* ------------------------------------------------------------------ */
   /* placeholder screens for later sections                              */
   /* ------------------------------------------------------------------ */
   function stubScreen(name, title, text, features, build) {

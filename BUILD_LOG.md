@@ -67,12 +67,123 @@ Scene API contract: `{ scene, camera, update(dt), mode }` — the app renders it
 - `F1.DATA.circuits[].date` uses provisional 2026 dates — edit freely in
   `data/circuits/index.js`.
 
+
+---
+
+## Section 2 — Circuits + procedural environment  ✅ (build 0.2)
+
+**Delivered**
+- `physics/track.js` — track model builder.
+  - `build(def)`: turns a segment list (`straight` / `corner` with radius) into a
+    centreline by **analytic corner arcs** + straights scaled to absorb the length
+    delta; steering bias (`biasCurv`) drives the fit, ≤12 iterations, always < 0.12 %
+    length error on the 8 hand-traced layouts.
+  - `buildFromPoints(def)`: delta-encoded surveyed centrelines (cm/dm steps),
+    exact closure + uniform rescale to the official lap length (`def.scaledBy`).
+  - `finalize()`: 4 m resample + heading, curvature, width, banking, kerbs, sectors,
+    DRS zones, pit lane, bounds, `origin`, `minY/maxY`, and helpers
+    `wrapS/indexAt/at/offsetPoint/project/onTrack/frac/info`.
+  - `F1.getTrack(id)` caches one model per circuit (`F1.clearTrackCache()`).
+- `data/circuits/<id>.js` — **all 24 circuits**, 252 KB total (largest 12.4 KB).
+  Encoding: `{id, source, accuracy, length, width, x0, z0, dx[], dz[], w[],
+  elevation, banking?, drs, sectors, pit}` with 5 m spacing.
+- `tools/circuit_source.js` — the 24 traced definitions (also the source of
+  elevation / DRS / sectors / pit / width for imported circuits).
+- `tools/gen_circuits.js` — `--check` validates every def (length, closure,
+  self-intersection, min radius) and `--svg <dir>` writes preview sheets.
+- `tools/tum_import.js` — converts the TUMFTM `racetrack-database` CSVs into the
+  compact format (decimate to 5 m, delta-encode, validate in `vm`, write files).
+- `tools/preview_tracks.js` — SVG contact sheet of the shipped geometry.
+- `world/environment.js` — procedural circuit world, origin-local (all geometry is
+  built around `model.origin` so float precision stays sane):
+  road, kerbs, white lines, side run-off, barriers/street walls + fences, tyre walls,
+  marshal posts, grandstands + instanced crowd, pit lane + pit building with per-garage
+  team-colour banners, race-control tower, start gantry with light pods, DRS gantries,
+  trees / palms / pylons / floodlights (instanced), landmarks per circuit feature
+  (harbour, dunes, sphere, lake, mountains…), sky dome shader, equirectangular canvas
+  env-map used as `scene.environment`, sun + hemisphere lighting, floodlights at night.
+- `world/track_scene.js` — `F1.trackScene.create(id)` → `{scene, camera, world, track,
+  meta, update(dt), setCameraMode('flyover'|'orbit'|'trackside'), destroy()}`.
+- `ui/ui.js` — `track-preview` screen: builds a circuit from the Quick Race screen with
+  session info (length, samples, sectors, DRS zones, time of day, data provenance) and
+  Flyover / Orbit / Trackside buttons; orbit mode supports drag + wheel.
+
+**Circuit accuracy**
+
+| Source | Count | Tag | Circuits |
+|---|---|---|---|
+| TUMFTM `racetrack-database` (surveyed GPS centrelines) | 16 | `ACCURATE` | australia, china, japan, barcelona, austria, britain, belgium, hungary, netherlands, italy, usa, mexico, brazil, bahrain, canada, abudhabi |
+| Hand-traced from published layout diagrams + official lengths | 8 | `APPROXIMATE` | miami, monaco, madrid, azerbaijan, singapore, lasvegas, qatar, saudi |
+
+All 24 lap lengths are within **0.12 %** of the official figure, e.g. monaco
+3334.3 m vs 3337 m, lasvegas 6194.1 m vs 6201 m, italy 5788.3 m vs 5793 m. The 8
+approximate files carry `// APPROXIMATE` headers and an `approximate: true` flag in
+the calendar metadata; README.txt (Section 8) lists them for the player.
+
+**Data provenance / licence**
+- Geometry for the 16 surveyed circuits derives from the **TUMFTM racetrack-database**
+  (`github.com/TUMFTM/racetrack-database`), **LGPL-3.0**. Only derived centreline
+  coordinates are stored (no code is linked); the attribution notice ships in
+  README.txt and at the top of every imported `data/circuits/*.js` file.
+- Lengths, corner counts, DRS zones, sectors and elevation profiles are authored in
+  `tools/circuit_source.js` from public circuit data (`// VERIFY` where provisional).
+
+**Bugs found and fixed while getting the 3D view right** (recorded so later sections
+don't reintroduce them)
+1. Ribbon geometry was wound downwards → the whole road was back-face culled and lit
+   from below. Each quad now picks its winding from the edge cross product, and road /
+   kerb / line / wall materials are `DoubleSide`.
+2. The run-off apron was a single ribbon from `-(w+9)` to `+(w+9)` — it covered the
+   asphalt. Split into two side aprons that start at the track edge.
+3. The UI scrim (`.screen::before`) darkened the entire 3D view — on narrow viewports
+   the mobile media query made it ~85 % opaque. Screens can now set `noScrim: true`;
+   `track-preview` does, and only a soft left-hand gradient remains for the info panel.
+4. The sky dome (r = 3000) sat beyond the camera far plane (2.6–3.2 km) and was
+   clipped away. Radius is now 1500 and the shader includes the tone-mapping and
+   colour-space chunks (a custom `ShaderMaterial` does not get them automatically).
+5. Shadow acne: a shadow camera covering a 2 km circuit is ~1 m/texel and blackens
+   every flat surface. The frustum is now ±150 m and follows the camera
+   (`world.setShadowFocus(x, z)`), with `normalBias` 0.06.
+6. `CanvasTexture.clone()` loses `colorSpace` and the per-instance repeat; the world
+   now mutates the cached texture instead of cloning it.
+7. Night races were pitch black: floodlights are physically-correct point lights
+   (4200 cd, 30 m above the track) plus a cool "moon" directional and a raised
+   hemisphere floor.
+
+**Interface card (used by later sections)**
+```js
+F1.getTrack(id) / F1.track.build(def) / F1.track.buildFromPoints(def) / F1.clearTrackCache()
+track model: {count, step, length, targetLength, x[], y[], z[], heading[], width[],
+              curvature[], banking[], kerbLeft[], kerbRight[], sectors, drs[],
+              pit, bounds, origin, minY, maxY, source, accuracy,
+              at(s, out) -> {x,y,z,heading,width,curvature},  // WORLD space
+              offsetPoint(s, lat, out), project(x,z), onTrack(x,z), indexAt(s), wrapS(s)}
+F1.trackScene.create(id, opts) ->
+  { scene, camera, world, track, meta,
+    update(dt), setCameraMode('flyover'|'orbit'|'trackside'), destroy() }
+F1.world.build(model, meta, opts) ->
+  { group, sky, envMap, sun, ambient, floodlights, meta, model,
+    update(dt), setWeather('dry'|'wet'|'overcast'), setShadowFocus(x,z),
+    setFogHook(fn), dispose() }
+// IMPORTANT: the track model is in world space, the rendered world is origin-local.
+// Subtract track.origin.{x,z} at every boundary (camera, raycast, minimap, HUD).
+F1.world.minimapPath(model, w, h, pad) -> {pts, toScreen(x,z)}
+```
+
+**Exit test** (headless Chromium, WebGL2/SwiftShader, `file://`)
+- All 24 circuits build and render: 43–98 draw calls, 23 k–134 k triangles.
+- Track lengths: 24/24 within 0.12 %; `node tools/gen_circuits.js --check` → 24/24 OK.
+- No page errors or console errors on any circuit; the only console output is
+  Three.js's r150 UMD deprecation notice.
+- Visual check: orbit contact sheet (all 24), plus flyover/trackside/night captures
+  for Monza, Spa and Singapore.
+
 ---
 
 ## Next steps (queue)
-1. Section 2: track model generator + 24 circuits + procedural environments.
-2. Section 3: vehicle physics, cameras, broadcast HUD.
-3. Section 4: AI, race control, pits, weather.
-4. Section 5: weekend formats, replays, classification.
-5. Section 6: career, R&D, market, saves.
-6. Section 7: audio, polish, size audit, README.txt.
+1. Section 3: vehicle physics, cameras, broadcast HUD.
+2. Section 4: AI, race control, pits, weather.
+3. Section 5: weekend formats, replays, classification.
+4. Section 6: career, R&D, market, saves.
+5. Section 7: audio, polish, size audit, README.txt.
+6. Section 8: README/README.txt, final size + `file://` verification.
