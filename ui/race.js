@@ -55,6 +55,7 @@
           '<button class="btn primary" data-act="resume">Resume</button>' +
           '<button class="btn" data-act="restart">Restart session</button>' +
           '<button class="btn" data-act="camera">Change camera</button>' +
+          (params.weekend ? '<button class="btn" data-act="paddock">Return to paddock</button>' : '') +
           '<button class="btn ghost" data-act="quit">Quit to menu</button>' +
           '</div>' +
           '<div class="pause-keys muted">' +
@@ -63,6 +64,7 @@
           '<span><b>C</b> camera</span><span><b>X</b> look back</span>' +
           '<span><b>R</b> reset car</span><span><b>H</b> HUD</span>' +
           '<span><b>P</b> pit request</span><span><b>[ / ]</b> pit tyres</span>' +
+          '<span><b>T</b> replay</span><span><b>V</b> photo mode</span>' +
           '<span><b>Esc</b> pause</span>' +
           '</div>' +
           '<div class="pause-note muted">Prototype build \u00b7 opponents arrive in the AI milestone</div>' +
@@ -71,7 +73,8 @@
           var b = e.target.closest('[data-act]');
           if (!b) return;
           var act = b.getAttribute('data-act');
-          if (act === 'resume') setPaused(false);
+          if (act === 'paddock') { recordWeekend(); quit(true); }
+          else if (act === 'resume') setPaused(false);
           else if (act === 'restart') restart();
           else if (act === 'camera') { if (session) session.cycleCamera(); }
           else if (act === 'quit') quit();
@@ -82,24 +85,48 @@
       function setPaused(p) {
         if (!session) return;
         session.setPaused(p);
-        if (pausePanel) pausePanel.classList.toggle('show', p && session.state !== 'finished');
+        if (pausePanel) pausePanel.classList.toggle('show', p && session.state.state !== 'finished');
         var hr = document.getElementById('hud-root');
         if (hr) hr.classList.toggle('dimmed', !!p);
       }
 
       function restart() {
+        var hr = document.getElementById('hud-root');
+        if (hr) hr.classList.remove('summary');
         quit(true);
         F1.app.show('race', params);
       }
 
-      function quit(silent) {
-        if (!silent) F1.app.show('main-menu');
-        else cleanup();
+      function quit(toPaddock) {
+        if (toPaddock && params.weekend) {
+          F1.app.show('weekend', {
+            weekend: params.weekend,
+            circuitId: params.weekend.circuitId,
+            type: params.weekend.type
+          });
+        } else {
+          F1.app.show('main-menu');
+        }
       }
 
       function cleanup() {
         if (disposed) return;
         disposed = true;
+        var hr = document.getElementById('hud-root');
+        if (hr) hr.classList.remove('summary');
+        // leaving a weekend session still counts if the player set a time
+        if (params.weekend && session && !params._recorded) {
+          try {
+            F1.screens.weekend.record(params.weekend, params.weekendSession, {
+              results: session.results || [],
+              position: session.position,
+              bestLap: session.bestLap,
+              laps: session.lapsTotal,
+              finished: session.state.state === 'finished'
+            });
+            params._recorded = true;
+          } catch (e) { /* the paddock is optional */ }
+        }
         if (keyHandler) {
           window.removeEventListener('keydown', keyHandler);
           window.removeEventListener('keyup', keyHandler);
@@ -143,7 +170,9 @@
           ambientC: params.ambientC,
           field: params.field,
           seed: params.seed,
-          round: params.round
+          round: params.round,
+          order: params.order,
+          formationLap: params.formationLap
         });
         F1.app.raceSession = session;
 
@@ -163,14 +192,18 @@
           if (e.type === 'keyup') { session.onKey(e); return; }
           if (e.repeat) return;
           var code = e.code;
+          /* pit controls stay live even when the pause key is bound nearby */
+          if (code === 'KeyP' || code === 'BracketLeft' || code === 'BracketRight') {
+            if (!session.paused && session.state.state === 'racing') { session.onKey(e); e.preventDefault(); return; }
+          }
           if (hit('pause', code) || code === 'Backspace') {
-            if (session.state === 'finished') return;
+            if (session.state.state === 'finished') return;
             setPaused(!session.paused);
             e.preventDefault();
             return;
           }
           if (session.paused) return;
-          if (code === 'Enter' && session.state === 'finished') { showSummary(); return; }
+          if (code === 'Enter' && session.state.state === 'finished') { showSummary(); return; }
           if (hit('cycleHud', code)) { F1.bus.emit('hud-cycle'); return; }
           session.onKey(e);          // camera / reset / ERS / look-back
         };
@@ -181,10 +214,27 @@
       function onHud(data) {
         if (hud) hud.update(data);
       }
+      /* a weekend session writes itself back into the paddock */
+      function recordWeekend() {
+        if (!params.weekend || !params.weekendSession || !session) return;
+        if (params._recorded) return;
+        params._recorded = true;
+        try {
+          F1.screens.weekend.record(params.weekend, params.weekendSession, {
+            results: session.results || [],
+            position: session.position,
+            bestLap: session.bestLap,
+            laps: session.lapsTotal,
+            finished: session.state.state === 'finished'
+          });
+        } catch (e) { console.error('[weekend] record failed', e); }
+      }
+
       function onFinish(info) {
+        recordWeekend();
         F1.app.toast('Chequered flag \u00b7 best ' + (info.best ? U.fmtTime(info.best) : '\u2014'));
         setTimeout(function () {
-          if (!disposed && session && session.state === 'finished') showSummary();
+          if (!disposed && session && session.state.state === 'finished') showSummary();
         }, 4200);
       }
       function onCameraMode(m) {
@@ -218,7 +268,7 @@
       }
 
       function showSummary() {
-        if (!session) return;
+        if (!session || session.state.state !== 'finished') return;
         var panel = document.createElement('div');
         panel.className = 'race-pause show';
         var best = session.bestLap, last = session.lastLap;
@@ -234,14 +284,22 @@
           '</div>' +
           resultTable(session) +
           '<div class="pause-actions">' +
-          '<button class="btn primary" data-act="again">Race again</button>' +
+          (params.weekend
+            ? '<button class="btn primary" data-act="paddock">Return to paddock</button>'
+            : '<button class="btn primary" data-act="again">Race again</button>') +
           '<button class="btn" data-act="quit">Back to menu</button>' +
           '</div></div>';
+        var hudRoot = document.getElementById('hud-root');
+        if (hudRoot) hudRoot.classList.add('summary');
         panel.addEventListener('click', function (e) {
           var b = e.target.closest('[data-act]');
           if (!b) return;
-          if (b.getAttribute('data-act') === 'again') restart();
-          else quit();
+          var act = b.getAttribute('data-act');
+          if (act === 'again') restart();
+          else if (act === 'paddock') {
+            recordWeekend();
+            quit(true);
+          } else quit();
         });
         wrap.appendChild(panel);
       }

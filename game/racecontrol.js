@@ -221,7 +221,7 @@
     }
 
     function deployVSC(reason) {
-      if (flag !== 'green') return;
+      if (flag === 'red' || flag === 'sc') return;
       flag = 'vsc';
       limit = 45;
       vscTimer = 16;

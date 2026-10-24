@@ -105,7 +105,8 @@
         raceLaps: lapsTotal,
         ambientC: params.ambientC,
         wetness: params.wetness || 0,
-        seed: params.seed || (meta.id + '|' + (params.round || 1))
+        seed: params.seed || (meta.id + '|' + (params.round || 1)),
+        order: params.order || null
       }) : null;
 
       /* ---------------- race control ---------------- */
@@ -132,9 +133,10 @@
       });
 
       /* ---------------- timing state ---------------- */
+      var formation = !!params.formationLap;
       var St = {
         time: 0,                 // session clock (pauses with the game)
-        state: 'countdown',      // countdown | racing | finished
+        state: formation ? 'formation' : 'countdown',   // formation | countdown | racing | finished
         countdown: countdownStart,
         paused: false,
         started: false,          // crossed the line for the first time
@@ -170,6 +172,8 @@
         results: null,
         warnings: 0,
         blueFlag: false,
+        formCrossed: false,
+        formLastS: gridPos.s,
         ambientC: params.ambientC === undefined ? 22 : params.ambientC
       };
 
@@ -183,10 +187,38 @@
         return { s0: z[0] * track.length, s1: z[1] * track.length };
       });
 
+      /* ---------------- replay + photo mode ---------------- */
+      var rp = null;
+      if (F1.replay) {
+        var actors = [{ car: car, mesh: mesh, wheels: wheels }];
+        if (field) {
+          field.cars.forEach(function (e) {
+            actors.push({ car: e.car, mesh: e.mesh, wheels: e.wheels });
+          });
+        }
+        rp = F1.replay.create({
+          sceneApi: sceneApi,
+          actors: actors,
+          session: { track: track, cams: cams, state: St, setPaused: function (v) { setPaused(v); } }
+        });
+      }
+
       /* ---------------- previous pose (for interpolation) -------------- */
       var prev = { x: car.x, y: car.y, z: car.z, h: car.heading };
       var acc = 0;
       var wheelSpinV = 0;
+
+      /* ---------------- formation lap ---------------- */
+      /* The field rolls round at 60 % pace with the player's car driven for
+         them. When the car reaches the line everyone lines up again and the
+         lights start. */
+      var formDriver = null;
+      if (formation && F1.ai) {
+        var formProf = F1.ai.profile(track, car, { vTop: 96 });
+        formDriver = F1.ai.createDriver(car, track, formProf, {
+          skill: 0.92, pace: 0.62, aggression: 0.2
+        });
+      }
 
       /* ---------------- race control inputs ---------------- */
       var rcCars = [{ id: driverId, car: car, isPlayer: true }];
@@ -204,6 +236,12 @@
           steer: 0, throttle: 0, brake: 0, boost: false,
           shiftUp: false, shiftDown: false
         };
+        if (St.state === 'formation') {
+          var fi = formDriver ? formDriver.update(dt) : { steer: 0, throttle: 0.3, brake: 0 };
+          inp.steer = fi.steer; inp.throttle = fi.throttle; inp.brake = fi.brake;
+          car.ersMode = St.ersMode;
+          return inp;
+        }
         if (St.state === 'countdown') {
           // the throttle is live on the grid but the car is held: give the
           // player the "revs" feedback of a real start
@@ -320,6 +358,25 @@
         });
       }
 
+      /* after the formation lap: everyone back on the grid, lights out */
+      function startCountdown() {
+        St.state = 'countdown';
+        St.countdown = 2.6;
+        St.lap = 1;
+        St.lapTime = 0;
+        St.started = false;
+        St.lastCrossS = gridPos.s;
+        var p = track.offsetPoint(gridPos.s, gridPos.lateral, {});
+        car.x = p.x; car.z = p.z; car.y = p.y; car.heading = p.heading;
+        car.vx = 0; car.vl = 0; car.r = 0; car.steer = 0; car.gear = 1;
+        car.lastIdx = track.indexAt(gridPos.s);
+        car.s = gridPos.s; car.lateral = gridPos.lateral;
+        prev.x = car.x; prev.z = car.z; prev.h = car.heading;
+        if (field) field.regrid();
+        if (rc) rc.say('Formation lap complete \u2014 grid set', 'flag');
+        say('Formation lap complete');
+      }
+
       function finish() {
         St.state = 'finished';
         St.finishTime = St.time;
@@ -409,6 +466,15 @@
           }
           St.lastCrossS = nowS;
 
+          /* a terminal car is out: the chequered flag comes early */
+          if (car.damage.suspension > 0.98 || car.damage.engine > 0.98) {
+            if (!St.retired) {
+              St.retired = true;
+              say('Terminal damage \u2014 retirement');
+              finish();
+            }
+          }
+
           /* track limits: a warning after 1.5 s off the road in one go, and
              a five second penalty every fourth warning */
           if (car.edge > 1.6) St.offTime += STEP;
@@ -429,6 +495,11 @@
       }
 
       function tickTiming(dt) {
+        if (St.state === 'formation') {
+          // no lap timing on the formation lap: the clock starts at lights out
+          St.time += 0;
+          return;
+        }
         if (St.state === 'countdown') {
           St.countdown -= dt;
           if (St.countdown <= 0) {
@@ -482,6 +553,19 @@
         if (!(dt > 0)) return;
         dt = Math.min(dt, 0.1);
 
+        /* replay and photo mode freeze the sim but keep rendering */
+        if (rp && rp.playing) {
+          var alive = rp.update(dt);
+          if (!alive) { rp.stop(); say('Replay finished'); }
+          pushHud();
+          return;
+        }
+        if (rp && rp.photo.active) {
+          rp.photo.update(sceneApi.camera);
+          pushHud();
+          return;
+        }
+
         /* menu / pause: keep rendering, freeze the clock */
         if (St.paused) {
           render(0);
@@ -508,6 +592,20 @@
           St.time += STEP;
           if (St.state === 'racing' && !St.started) St.lapTime = 0;
 
+          if (St.state === 'formation' && field) {
+            field.update(STEP);
+            field.setLimit(0);
+            field.setFrozen(false);
+          }
+          if (St.state === 'formation' && St.time > 1 && !St.formCrossed) {
+            // the line is crossed on the way round: that is the formation lap
+            if (car.s < track.length * 0.5 && St.formLastS > track.length * 0.5) {
+              St.formCrossed = true;
+              startCountdown();
+            }
+            St.formLastS = car.s;
+          }
+
           /* the world keeps turning at the same rate as the player's car */
           if (St.state === 'racing') {
             if (rc) {
@@ -527,6 +625,7 @@
 
         var alpha = acc / STEP;
         render(alpha);
+        if (rp) rp.record(dt);
         world.setShadowFocus && world.setShadowFocus(cams.focus.x, cams.focus.z);
         pushHud();
       }
@@ -749,6 +848,36 @@
         return St.pitCompound;
       }
 
+      /* ---------------- replay controls ---------------- */
+      function toggleReplay(force) {
+        if (!rp) return false;
+        if (rp.photo.active) rp.photo.toggle(false);
+        var want = force === undefined ? !rp.playing : !!force;
+        if (want) {
+          if (!rp.start(14)) { say('Nothing to replay yet'); return false; }
+          F1.bus.emit('replay', { playing: true, progress: 0 });
+          say('Replay \u2014 T to exit');
+        } else {
+          rp.stop();
+          F1.bus.emit('replay', { playing: false });
+        }
+        return want;
+      }
+
+      function setReplaySpeed(v) { if (rp) rp.setSpeed(v); }
+
+      /* mouse control for photo mode */
+      var mouseHandler = null;
+      if (rp) {
+        mouseHandler = function (e) {
+          if (!rp.photo.active) return;
+          if (e.type === 'wheel') { rp.photo.orbit(0, 0, e.deltaY); return; }
+          if (e.buttons & 1) rp.photo.orbit(e.movementX || 0, e.movementY || 0, 0);
+        };
+        window.addEventListener('mousemove', mouseHandler);
+        window.addEventListener('wheel', mouseHandler, { passive: true });
+      }
+
       /* ---------------- keyboard ---------------- */
       function onKey(e) {
         var code = e.code;
@@ -763,6 +892,12 @@
         if (code === 'KeyC') cycleCamera(1);
         if (code === 'KeyR') resetCar();
         if (code === 'KeyF') cycleERS();
+        if (code === 'KeyT') toggleReplay();
+        if (code === 'KeyV' && rp) rp.photo.toggle();
+        if (code === 'KeyJ' && rp && rp.photo.active) {
+          rp.photo.capture(meta.id + '-' + Date.now());
+          say('Photo saved');
+        }
         if (code === 'KeyP') requestPit();
         if (code === 'BracketLeft' || code === 'BracketRight') cyclePitCompound();
       }
@@ -771,6 +906,11 @@
       function dispose() {
         if (field) { try { field.dispose(); } catch (e) { console.error(e); } field = null; }
         if (rainFx) { try { rainFx.dispose(); } catch (e) {} rainFx = null; }
+        if (mouseHandler) {
+          window.removeEventListener('mousemove', mouseHandler);
+          window.removeEventListener('wheel', mouseHandler);
+          mouseHandler = null;
+        }
         if (mesh.parent) mesh.parent.remove(mesh);
         F1.input.enabled = true;
       }
@@ -785,7 +925,9 @@
         cycleCamera: cycleCamera, toggleDRS: toggleDRS,
         requestPit: requestPit, cyclePitCompound: cyclePitCompound,
         onKey: onKey, dispose: dispose,
-        field: field, raceControl: rc, pitLane: pitLane,
+        field: field, raceControl: rc, pitLane: pitLane, replay: rp,
+        toggleReplay: toggleReplay, setReplaySpeed: setReplaySpeed,
+        get photoMode() { return !!(rp && rp.photo.active); },
         get results() { return St.results; },
         get flag() { return rc ? rc.flag : 'green'; },
         get weather() { return rc ? rc.weather : null; },

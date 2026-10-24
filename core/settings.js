@@ -42,7 +42,7 @@
     cycleHud: ['KeyH'],
     camera: ['KeyC'],
     lookBack: ['KeyX'],
-    pause: ['Escape', 'KeyP'],
+    pause: ['Escape'],          // KeyP is the pit request; do not bind it here
     resetCar: ['KeyR'],
     overtake: ['KeyO'],
     radio: ['KeyT']

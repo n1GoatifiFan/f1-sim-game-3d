@@ -76,7 +76,21 @@
       opts = opts || {};
       var playerId = opts.playerId || null;
       var pace = opts.pace === undefined ? 1.0 : opts.pace;
-      var seats = (opts.seats || buildGrid(track.id + '|' + (opts.seed || 'r1')));
+      var seats;
+      if (opts.order && opts.order.length) {
+        // an explicit grid (qualifying result) wins over the rating order
+        seats = opts.order.map(function (id) {
+          var d = F1.DATA.getDriver(id);
+          var team = F1.DATA.getTeam(d.team);
+          var perf = (team.performance.power + team.performance.aero + team.performance.chassis) / 3;
+          return {
+            teamId: team.id, driverId: id, team: team, driver: d,
+            overall: F1.DATA.driverOverall(d), score: perf
+          };
+        });
+      } else {
+        seats = (opts.seats || buildGrid(track.id + '|' + (opts.seed || 'r1')));
+      }
       var aiSeats = seats.filter(function (s) { return s.driverId !== playerId; });
       var startS = opts.startS === undefined ? track.length - GRID : opts.startS;
       var cars = [];
@@ -97,7 +111,8 @@
       var nextSlot = 0;
       aiSeats.forEach(function (seat, i) {
         if (nextSlot === playerSlot) nextSlot++;
-        var slot = slotPos(track, startS, nextSlot++);
+        var mySlot = nextSlot++;
+        var slot = slotPos(track, startS, mySlot);
         var s = slot.s, lateral = slot.lateral;
         var spec = F1.vehicle.specFor(seat.teamId, seat.driverId);
         var car = F1.vehicle.create(track, spec, {
@@ -151,7 +166,10 @@
           warnings: 0,
           penalties: 0,
           position: i + 1,
+          retired: false,
+          crashes: 0,
           isPlayer: false,
+          slot: mySlot,
           pitRun: null,
           served: false,
           stops: 0,
@@ -215,13 +233,16 @@
           lastLap: e.lastLap,
           bestLap: e.bestLap,
           penalty: e.penalties,
+          retired: !!e.retired,
           me: !!e.isPlayer
         };
       }
 
       function standings(playerRow) {
         var rows = cars.map(function (e) {
-          return { e: e, p: progressOf(e.car, e.laps, e.started) };
+          // a retired car is classified behind every car still running
+          var p = progressOf(e.car, e.laps, e.started);
+          return { e: e, p: e.retired ? p - track.length * 100 : p };
         });
         if (playerRow) {
           rows.push({
@@ -342,6 +363,16 @@
           var p = e.prev, c = e.car;
           p.x = c.x; p.y = c.y; p.z = c.z; p.h = c.heading;
 
+          if (e.retired) continue;
+          if (e.car.wallContact > 0.9) e.crashes = (e.crashes || 0) + 1;
+          if (e.crashes >= 3 || e.car.damage.suspension > 0.95 || e.car.damage.engine > 0.95) {
+            /* out of the race: park it off the road and stop simulating it */
+            e.retired = true;
+            e.car.vx = 0; e.car.throttle = 0; e.car.brake = 1;
+            e.mesh.visible = true;
+            say((e.seat.driver.code || '') + ' — out of the race');
+            continue;
+          }
           if (e.pitRun) {
             e.pitRun.update(h);
             if (e.pitRun.atBox && !e.served) {
@@ -464,6 +495,25 @@
           for (var i = 0; i < cars.length; i++) cars[i].driver.setWetness(cond.wetness);
         },
         startPit: startPit,
+        /* after a formation lap the whole field lines up again in grid order */
+        regrid: function () {
+          for (var i = 0; i < cars.length; i++) {
+            var e = cars[i];
+            var gp = slotPos(track, startS, e.slot);
+            var p = track.offsetPoint(gp.s, gp.lateral, {});
+            e.car.x = p.x; e.car.z = p.z; e.car.y = p.y;
+            e.car.heading = p.heading;
+            e.car.vx = 0; e.car.vl = 0; e.car.r = 0; e.car.steer = 0;
+            e.car.gear = 1; e.car.lastIdx = track.indexAt(gp.s);
+            e.car.wallContact = 0; e.car.inPit = false;
+            e.car.s = gp.s; e.car.lateral = gp.lateral;
+            e.prev.x = p.x; e.prev.z = p.z; e.prev.h = p.heading;
+            e.laps = 0; e.started = false; e.lastCrossS = gp.s; e.pitRun = null;
+            e.mesh.position.set(p.x - track.origin.x, p.y, p.z - track.origin.z);
+            e.mesh.rotation.y = p.heading + Math.PI;
+          }
+          time = 0;
+        },
         carAt: function (id) { return byDriver[id]; },
         update: update,
         render: render,

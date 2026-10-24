@@ -202,6 +202,13 @@
       weatherEl.innerHTML = '<i class="wx-icon"></i><span class="wx-label"></span><span class="wx-wet"><b></b></span>';
       wrap.appendChild(weatherEl);
 
+      var replayEl = node('div', 'hud-replay', 'REPLAY');
+      wrap.appendChild(replayEl);
+
+      var photoEl = node('div', 'hud-photo',
+        '<b>PHOTO MODE</b><span>drag to orbit \u00b7 wheel to zoom \u00b7 J to save \u00b7 V to exit</span>');
+      wrap.appendChild(photoEl);
+
       var pitEl = node('div', 'hud-pit');
       wrap.appendChild(pitEl);
 
@@ -221,6 +228,15 @@
       function setVis(mode) {
         wrap.className = 'hud hud-' + mode;
       }
+
+      F1.bus.on('replay', function (info) {
+        replayEl.classList.toggle('show', !!(info && info.playing));
+      });
+      F1.bus.on('photo-mode', function (on) {
+        wrap.classList.toggle('photo', !!on);
+        var root2 = document.getElementById('hud-root');
+        if (root2) root2.classList.toggle('photo', !!on);
+      });
 
       var api = {
         update: function (d) {
@@ -249,7 +265,10 @@
             });
             lights.classList.toggle('show', d.state === 'countdown');
           }
-          if (d.state === 'countdown' && d.countdown > 0) {
+          if (d.state === 'formation') {
+            big.textContent = 'FORMATION LAP';
+            big.className = 'hud-big show';
+          } else if (d.state === 'countdown' && d.countdown > 0) {
             big.textContent = Math.ceil(d.countdown);
             big.className = 'hud-big show count';
           } else if (d.state === 'countdown') {

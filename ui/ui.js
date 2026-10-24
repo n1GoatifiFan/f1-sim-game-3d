@@ -368,10 +368,20 @@
             '</div>' +
           '</div>' +
           '<div style="flex:1"></div>' +
-          '<button class="btn primary" id="start-race">Start Session \u203a</button>';
+          '<button class="btn" id="start-weekend">Full weekend \u203a</button>' +
+          '<button class="btn primary" id="start-race">Quick race \u203a</button>';
+        footer.querySelector('#start-weekend').addEventListener('click', function () {
+          F1.app.show('weekend', {
+            circuitId: meta.id,
+            type: meta.sprint ? 'sprint' : 'standard',
+            seed: 'wkd|' + meta.id,
+            teamId: F1.settings.career.teamId || 'mclaren',
+            driverId: F1.DATA.teamOf(F1.settings.career.teamId || 'mclaren').drivers[0],
+            raceLength: F1.settings.gameplay.raceLength
+          });
+        });
         footer.querySelector('#start-race').addEventListener('click', function () {
           if (F1.app.startQuickRace) F1.app.startQuickRace({ circuit: meta.id, raceLength: F1.settings.gameplay.raceLength });
-          else F1.app.toast('Race sessions arrive in the next build (Section 3). Track environments are Section 2.');
         });
       }
 

@@ -122,8 +122,12 @@
     var sens = F1.settings.controls.steerSensitivity || 1;
     var kLeft = Input.action('steerLeft') ? 1 : 0;
     var kRight = Input.action('steerRight') ? 1 : 0;
-    var target = (kRight - kLeft) * sens;
-    if (Input.usingGamepad && pad()) target = Input._gp.steer;
+    /* Sign convention: the physics model wants a *positive* steering angle to
+       turn the car LEFT (that is how the AI's Stanley controller is written),
+       while a player reads "right" on the stick. So the human input is
+       negated here, once, and nothing downstream has to care. */
+    var target = (kLeft - kRight) * sens;
+    if (Input.usingGamepad && pad()) target = -Input._gp.steer;
     // steer rate depends on speed later; here just a pleasant ramp
     var rate = Math.abs(target) > Math.abs(Input._steer) ? 7.5 : 11;
     Input._steer = F1.util.damp(Input._steer, F1.util.clamp(target, -1, 1), rate, dt);
