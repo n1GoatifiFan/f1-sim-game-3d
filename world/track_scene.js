@@ -106,7 +106,14 @@
       }
 
       var p = {};
+      var api = null;
       function update(dt) {
+        if (mode === 'race') {
+          // a race session drives the camera and the world clock itself
+          world.update(dt);
+          if (api && api.onFrame) api.onFrame(dt);
+          return;
+        }
         world.update(dt);
         world.setShadowFocus && world.setShadowFocus(camera.position.x, camera.position.z);
         if (mode === 'flyover') {
@@ -165,8 +172,9 @@
         window.removeEventListener('mouseup', onUp);
       }
 
-      var api = {
+      api = {
         scene: scene, camera: camera, update: update, mode: 'track',
+        onFrame: null,
         world: world, track: track, meta: meta,
         setCameraMode: setCameraMode,
         destroy: destroy

@@ -99,7 +99,17 @@
   App.currentSession = null;
 
   App.startQuickRace = function (params) {
-    App.show('track-preview', params);
+    params = params || {};
+    var id = params.circuit || F1.settings.gameplay.lastCircuit || 'italy';
+    var meta = F1.DATA.getCircuitMeta(id);
+    var frac = params.raceLength || F1.settings.gameplay.raceLength || 0.25;
+    params.circuit = id;
+    params.laps = params.laps || Math.max(3, Math.round((meta.laps || 50) * frac));
+    params.teamId = params.teamId || F1.settings.career.teamId || 'mclaren';
+    params.driverId = params.driverId || F1.DATA.teamOf(params.teamId).drivers[0];
+    F1.settings.gameplay.lastCircuit = id;
+    F1.settings.save();
+    App.show('race', params);
   };
 
   /* ------------------------------------------------------------------ */

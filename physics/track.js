@@ -344,12 +344,14 @@
       var a = (i - 1 + count) % count, b = (i + 1) % count;
       heading[i] = Math.atan2(x[b] - x[a], z[b] - z[a]);
     }
+    /* curvature from a wide stencil: +/-2 samples (16 m at Monza). A 1-sample
+       stencil picks up survey noise and turns every chicane into a hairpin. */
     for (i = 0; i <= count; i++) {
-      var prev = (i - 1 + count) % count, next = (i + 1) % count;
+      var prev = (i - 2 + count) % count, next = (i + 2) % count;
       var dh = heading[next] - heading[prev];
       while (dh > Math.PI) dh -= TAU;
       while (dh < -Math.PI) dh += TAU;
-      curvature[i] = dh / (2 * segLen);
+      curvature[i] = dh / (4 * segLen);
     }
     function boxSmooth(arr, radius) {
       var out = new Float32Array(arr.length);
@@ -513,15 +515,22 @@
 
     model.project = function (px, pz, hintIdx) {
       var best = -1, bestD = Infinity;
-      // fast path: scan around the hint
+      // Fast path: scan a window around the hint. The window is deliberately
+      // short (±14 samples ≈ ±56 m) so a hairpin cannot snap the projection
+      // onto the other leg of the corner; anything wider falls through to the
+      // grid search, which always finds the true nearest point.
       if (hintIdx !== undefined && hintIdx !== null) {
-        for (var d = -40; d <= 40; d++) {
+        for (var d = -14; d <= 14; d++) {
           var ii = (hintIdx + d + count) % count;
           var ddx = x[ii] - px, ddz = z[ii] - pz;
           var dd = ddx * ddx + ddz * ddz;
           if (dd < bestD) { bestD = dd; best = ii; }
         }
-        if (bestD < 900) return finishProjection(best, px, pz, bestD);
+        if (bestD < 400) {                       // within 20 m of the centreline
+          var pr0 = finishProjection(best, px, pz, bestD);
+          if (Math.abs(pr0.lateral) < 26) return pr0;
+        }
+        best = -1; bestD = Infinity;
       }
       var c0x = Math.floor((px - minX) / GRID), c0z = Math.floor((pz - minZ) / GRID);
       for (var ringW = 0; ringW < 24; ringW++) {

@@ -230,9 +230,107 @@ character, while staying inside the draw-call and triangle budget.
 
 ---
 
+## Section 3 — physics, cameras, HUD (driveable prototype)
+
+Six new files, all registered in `index.html` in dependency order
+(`tyres → vehicle → ai/driver → cameras → session → hud → race`).
+
+### `physics/tyres.js` (new)
+Five compounds with grip, wear rate, peak temperature, heat gain and wet ability,
+the normalised slip curve (`F1.tyres.curve`, 1.0 at the peak, 0.84 sliding), a
+load/temperature/wear-aware `mu()`, seven surface types and a per-wheel thermal
+model (`step`): slip power plus brake heat in, convection out, wear from slip
+energy only. Tyres are separate state per corner (FL/FR/RL/RR) so a lock-up or a
+spun rear shows up individually on the HUD.
+
+### `physics/vehicle.js` (new)
+Classic two-axle bicycle model at a fixed 120 Hz, ~700 lines:
+
+* **Power unit** — 405 kW ICE torque curve, 8-speed gearbox with a 45 ms shift,
+  300 kW ERS (350 kW in overtake) out of an 8 MJ store, 250 kW regen under
+  braking, fuel burn 0.0275 kg/s at full throttle.
+* **Aero** — X mode (drag 0.86 / downforce 1.95) and Z mode (1.24 / 4.60),
+  auto-switching with straight-line and lateral-g gates, DRS reducing downforce
+  by 28 %; front-wing/floor/rear-wing damage scales it down.
+* **Tyres** — per-axle slip angles, combined-slip friction ellipse, load
+  sensitivity, weight transfer from the previous step's longitudinal g, ABS
+  (0.905–0.755 of available grip depending on level) and traction control that
+  trims the drive force before the rears break away.
+* **Barriers** — the world builds its walls 2.2 m outside the white line
+  (`world/environment.js`), so the engine measures exactly the same distance from
+  the *track's own width* instead of a fixed radius. Contact reflects the outward
+  velocity with 0.35 restitution, scrubs speed, and damages the wing and
+  suspension according to impact speed. Hitting a wall at 300 km/h costs a wing;
+  a nudge at 40 km/h costs nothing.
+
+Measured with `node tools/simcheck.js`: **0–100 km/h 3.1 s, 0–200 km/h 6.7 s,
+0–300 km/h 11.2 s**, peak 323 km/h in X mode at Monza, 4.1 g under braking from
+300 km/h, 1.36 g sustained cornering on the hard tyre at 22 °C.
+
+### `ai/driver.js` (new, finished in Section 4)
+A speed profile is solved once per circuit: a cornering pass from the track's own
+curvature and the car's downforce (`v² = r·μ·(g + k·v²)`, curvature averaged over
+~20 m and radius floored at 18 m), a forward acceleration pass from the power
+unit, and a backward braking pass from the downforce. The driver then runs a
+Stanley controller (track heading + cross-track error) with yaw damping, samples
+the profile for pedals, anticipates braking from the deceleration needed over the
+next 20 m, counter-steers when the rear steps out, and has a three-state recovery
+machine (run → reverse → recover) so a tap of the barrier cannot end a session.
+It drives the *same* `F1.vehicle.step` as the player; nothing about it cheats.
+
+### `physics/cameras.js` (new)
+Five rigs — T-cam, cockpit/nose cam, chase, broadcast and cinematic — with
+damped positions, speed/kerb shake, roll and look-back. The broadcast director
+pre-computes 14 posts around the lap from the geometry and cuts between them,
+holding each shot for at least a second.
+
+### `game/session.js` (new)
+The session owns the clock: real time accumulates, whole 1/120 s physics steps
+run (max 12 per frame), and the body transform is interpolated by the leftover
+fraction so the car is smooth at 60 and 144 Hz. It handles the 3-2-1 lights
+(the car is held on the grid, throttle only revs the engine), lap/sector timing
+against the track's own sector boundaries, a ghost delta against the best lap,
+DRS/overtake zones from the track data, ERS modes (harvest/balanced/deploy/
+overtake), fuel burn, pauses, car resets, and the HUD feed.
+
+### `ui/hud.js` + `css/hud.css` (new)
+Broadcast layout: position/lap block, timing tower, five start lights, radio
+banner, minimap with DRS zones and the car's dot, per-corner tyre temperatures
+and wear bars, compound chip, fuel bar, 15 RPM LEDs, gear/speed, throttle/brake
+pipes, ERS/aero/DRS/surface pills, last/best/sector times, countdown number and
+the chequered-flag card. `H` cycles full → minimal → off.
+
+### `ui/race.js` (new)
+The driveable screen: builds the circuit scene, mounts the session and HUD,
+forwards keys, and owns the pause menu (resume / restart / camera / quit) and
+the results card (position, laps, best and last lap). Leaving the screen
+disposes the world, the session and the HUD in that order.
+
+### Wiring
+`App.startQuickRace` now launches the session instead of the track preview: it
+derives the lap count from the race-length setting and stores the last circuit.
+`world/track_scene.js` gained a `race` mode that stops running its own inspection
+camera and hands the frame to `api.onFrame` (the session).
+
+**Exit test** (headless Chromium, WebGL2/SwiftShader, `file://`)
+- Quick Race → grid: countdown runs, lights come on, car launches; 15 s of
+  throttle from the line reaches **320 km/h in 6th, 14 253 rpm**.
+- All five cameras render the road, the car and the scenery; `C` cycles them,
+  `H` cycles the HUD, `Esc` pauses, `R` resets, `F` changes ERS mode.
+- A full lap with the AI driving completes, the chequered flag fires, the
+  results card opens, and quitting returns to the menu with the scene, session
+  and HUD all disposed.
+- No page errors and no console errors on any of it.
+- Known gap: AI lap pace is 5–40 % off the target depending on circuit (Monza
+  154 s vs 111 s achievable, Belgium 142 s, Brazil 95 s, Singapore 106 s) and
+  Monaco still has barrier incidents. Pace and contact avoidance are Section 4
+  work; the player car, physics, cameras, timing and HUD are all in place.
+
+---
+
 ## Next steps (queue)
-1. Section 3: vehicle physics, cameras, broadcast HUD.
-2. Section 4: AI, race control, pits, weather.
+1. Section 4: finish the AI (pace + contact avoidance), 21 opponents, race
+   control, pits, weather.
 3. Section 5: weekend formats, replays, classification.
 4. Section 6: career, R&D, market, saves.
 5. Section 7: audio, polish, size audit, README.txt.
