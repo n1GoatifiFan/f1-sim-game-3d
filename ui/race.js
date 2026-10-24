@@ -56,6 +56,8 @@
           '<button class="btn" data-act="restart">Restart session</button>' +
           '<button class="btn" data-act="camera">Change camera</button>' +
           (params.career ? '<button class="btn" data-act="career">Back to career</button>' : '') +
+          (params.championship ? '<button class="btn" data-act="champ">Back to championship</button>' : '') +
+          (params.timeTrial ? '<button class="btn" data-act="tt">Back to time trial</button>' : '') +
           (params.weekend ? '<button class="btn" data-act="paddock">Return to paddock</button>' : '') +
           '<button class="btn ghost" data-act="quit">Quit to menu</button>' +
           '</div>' +
@@ -68,7 +70,7 @@
           '<span><b>T</b> replay</span><span><b>V</b> photo mode</span>' +
           '<span><b>Esc</b> pause</span>' +
           '</div>' +
-          '<div class="pause-note muted">Prototype build \u00b7 opponents arrive in the AI milestone</div>' +
+          '<div class="pause-note muted">Esc resumes \u00b7 M mutes the audio \u00b7 F3 shows the frame timing</div>' +
           '</div>';
         panel.addEventListener('click', function (e) {
           var b = e.target.closest('[data-act]');
@@ -76,6 +78,8 @@
           var act = b.getAttribute('data-act');
           if (act === 'paddock') { recordWeekend(); quit(true); }
           else if (act === 'career') { recordCareer(); quit('career'); }
+          else if (act === 'champ') { recordChampionship(); quit('champ'); }
+          else if (act === 'tt') { recordTimeTrial(); quit('tt'); }
           else if (act === 'resume') setPaused(false);
           else if (act === 'restart') restart();
           else if (act === 'camera') { if (session) session.cycleCamera(); }
@@ -102,6 +106,10 @@
       function quit(toPaddock) {
         if (toPaddock === 'career' && params.career) {
           F1.app.show('career', { career: params.career });
+        } else if (toPaddock === 'champ' && params.championship) {
+          F1.app.show('championship');
+        } else if (toPaddock === 'tt' && params.timeTrial) {
+          F1.app.show('time-trial');
         } else if (toPaddock && params.weekend) {
           F1.app.show('weekend', {
             weekend: params.weekend,
@@ -131,6 +139,7 @@
             params._recorded = true;
           } catch (e) { /* the paddock is optional */ }
         }
+        F1.bus.off('lap-complete', onLapComplete);
         if (keyHandler) {
           window.removeEventListener('keydown', keyHandler);
           window.removeEventListener('keyup', keyHandler);
@@ -177,7 +186,8 @@
           round: params.round,
           order: params.order,
           formationLap: params.formationLap,
-          field: params.field
+          field: params.field,
+          ghost: params.ghost
         });
         F1.app.raceSession = session;
 
@@ -236,6 +246,20 @@
         } catch (e) { console.error('[career] advance failed', e); }
       }
 
+      /* a custom championship round goes into its own points table */
+      function recordChampionship() {
+        if (!params.championship || !params.champRound || params._champDone) return;
+        if (!session || session.state.state !== 'finished') return;
+        params._champDone = true;
+        try {
+          var r = F1.championshipScreen.record(params, {
+            pos: session.position,
+            retired: !!(session.state && session.state.retired)
+          });
+          if (r) F1.app.toast('Championship \u00b7 P' + (r.pos || 22) + ' \u00b7 ' + r.points + ' pts', 2600);
+        } catch (e) { console.error('[championship] record failed', e); }
+      }
+
       /* a weekend session writes itself back into the paddock */
       function recordWeekend() {
         if (!params.weekend || !params.weekendSession || !session) return;
@@ -252,9 +276,26 @@
         } catch (e) { console.error('[weekend] record failed', e); }
       }
 
+      /* a time trial keeps its best lap as a ghost for next time, saved the
+         moment the lap is banked so quitting early cannot lose it */
+      function recordTimeTrial() {
+        if (!params.timeTrial || !session || !session.ghost) return;
+        var g = session.ghost;
+        if (F1.timetrial && F1.timetrial.store(params.circuit, g)) {
+          F1.app.toast('New personal best \u00b7 ghost saved');
+        }
+      }
+      function onLapComplete() {
+        if (!params.timeTrial) return;
+        recordTimeTrial();
+      }
+      F1.bus.on('lap-complete', onLapComplete);
+
       function onFinish(info) {
         recordWeekend();
         recordCareer();
+        recordChampionship();
+        recordTimeTrial();
         F1.app.toast('Chequered flag \u00b7 best ' + (info.best ? U.fmtTime(info.best) : '\u2014'));
         setTimeout(function () {
           if (!disposed && session && session.state.state === 'finished') showSummary();
@@ -294,6 +335,7 @@
         if (!session || session.state.state !== 'finished') return;
         var panel = document.createElement('div');
         panel.className = 'race-pause show';
+        recordTimeTrial();
         var best = session.bestLap, last = session.lastLap;
         panel.innerHTML =
           '<div class="pause-card">' +
@@ -309,7 +351,11 @@
           '<div class="pause-actions">' +
           (params.career
             ? '<button class="btn primary" data-act="career">Back to career</button>'
-            : params.weekend
+            : params.championship
+              ? '<button class="btn primary" data-act="champ">Back to championship</button>'
+              : params.timeTrial
+                ? '<button class="btn primary" data-act="tt">Back to time trial</button>'
+                : params.weekend
               ? '<button class="btn primary" data-act="paddock">Return to paddock</button>'
               : '<button class="btn primary" data-act="again">Race again</button>') +
           '<button class="btn" data-act="quit">Back to menu</button>' +
@@ -322,6 +368,8 @@
           var act = b.getAttribute('data-act');
           if (act === 'again') restart();
           else if (act === 'career') { recordCareer(); quit('career'); }
+          else if (act === 'champ') { recordChampionship(); quit('champ'); }
+          else if (act === 'tt') { recordTimeTrial(); quit('tt'); }
           else if (act === 'paddock') {
             recordWeekend();
             quit(true);

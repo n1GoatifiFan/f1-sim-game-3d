@@ -53,6 +53,16 @@
 
   /* friendly FPS toggle + escape routing for menus */
   window.addEventListener('keydown', function (e) {
+    /* M mutes everything, P during a menu is not a pause key any more */
+    var tag = (e.target && e.target.tagName) || '';
+    if (e.code === 'KeyM' && F1.audio && tag !== 'INPUT' && tag !== 'TEXTAREA') {
+      var muted = F1.audio.toggleMute();
+      F1.settings.audio.muted = muted;
+      F1.app.setAudioMutedClass(muted);
+      F1.app.toast('Sound ' + (muted ? 'muted' : 'on'), 1200);
+      F1.settings.save();
+      e.preventDefault();
+    }
     if (e.code === 'F3') {
       F1.settings.display.showPerformance = !F1.settings.display.showPerformance;
       F1.settings.save();

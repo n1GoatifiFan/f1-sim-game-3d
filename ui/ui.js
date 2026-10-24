@@ -116,7 +116,7 @@
       foot.innerHTML =
         '<span><b>Enter</b> select</span><span class="sep"></span>' +
         '<span><b>Drag</b> orbit car</span><span class="sep"></span>' +
-        '<span>v0.1 \u00b7 Section 1 build</span><span class="sep"></span>' +
+        '<span>v1.0 \u00b7 2026 season</span><span class="sep"></span>' +
         '<span>' + (F1.storage.available() ? 'Saves: local storage' : 'Saves: session only') + '</span>';
       wrap.appendChild(foot);
 
@@ -485,11 +485,27 @@
 
       /* ---- audio ---- */
       var a = F1.settings.audio;
+      function vol(key) {
+        return slider(Math.round(a[key] * 100), 0, 100, 5, function (v) {
+          a[key] = v / 100;
+          F1.settings.save();
+          if (F1.audio) F1.audio.applyVolumes();
+        }, function (v) { return v + '%'; });
+      }
+      function audioSlider(key, name, note) { return row(name, note || '', vol(key)); }
       body.appendChild(section('Audio', [
-        row('Master volume', '', slider(Math.round(a.master * 100), 0, 100, 5, function (v) { a.master = v / 100; F1.settings.save(); }, function (v) { return v + '%'; })),
-        row('Engine', '', slider(Math.round(a.engine * 100), 0, 100, 5, function (v) { a.engine = v / 100; F1.settings.save(); }, function (v) { return v + '%'; })),
-        row('Tyres & surface', '', slider(Math.round(a.tyres * 100), 0, 100, 5, function (v) { a.tyres = v / 100; F1.settings.save(); }, function (v) { return v + '%'; })),
-        row('Crowd', '', slider(Math.round(a.crowd * 100), 0, 100, 5, function (v) { a.crowd = v / 100; F1.settings.save(); }, function (v) { return v + '%'; }))
+        audioSlider('master', 'Master volume'),
+        audioSlider('engine', 'Engine'),
+        audioSlider('tyres', 'Tyres & surface'),
+        audioSlider('crowd', 'Crowd'),
+        audioSlider('ui', 'Radio & UI', 'Click feedback and the engineer\u2019s radio'),
+        audioSlider('engineer', 'Race engineer', 'Voice messages are text, not recordings'),
+        row('Mute everything', 'Toggle with M at any time', toggle(!!F1.settings.audio.muted, function (v) {
+          F1.settings.audio.muted = v;
+          F1.settings.save();
+          if (F1.audio) F1.audio.setMuted(v);
+          if (F1.app.setAudioMutedClass) F1.app.setAudioMutedClass(v);
+        }))
       ]));
 
       /* ---- gameplay ---- */
@@ -653,7 +669,7 @@
             '<button class="btn small" id="cam-side">Trackside</button>' +
           '</div>' +
           '<p class="muted" style="font-size:10.5px;line-height:1.5;margin:12px 0 0">' +
-            'Driving arrives in Section 3. Use the buttons or drag / scroll in orbit mode.' +
+            'Drag to orbit, scroll to zoom. Hit Race to drive this circuit.' +
           '</p>';
         wrap.appendChild(info);
         var camBtns = info.querySelectorAll('button');
@@ -677,36 +693,6 @@
       F1.app.setScene(null);
     }
   };
-
-  /* ------------------------------------------------------------------ */
-  /* placeholder screens for later sections                              */
-  /* ------------------------------------------------------------------ */
-  function stubScreen(name, title, text, features, build) {
-    F1.screens[name] = {
-      mount: function () {
-        var wrap = U.node('div', 'screen-inner');
-        wrap.appendChild(U.header({ title: title, sub: 'Coming in ' + build }));
-        var stub = U.node('div', 'stub');
-        stub.innerHTML =
-          '<span class="build-chip">Planned \u00b7 ' + build + '</span>' +
-          '<h2>' + title + '</h2>' +
-          '<p>' + text + '</p>' +
-          '<div class="features">' + features.map(function (f) { return '<span>' + f + '</span>'; }).join('') + '</div>' +
-          '<button class="btn" id="stub-back">Back to menu</button>';
-        stub.querySelector('#stub-back').addEventListener('click', function () { F1.app.show('main-menu'); });
-        wrap.appendChild(stub);
-        return wrap;
-      }
-    };
-  }
-
-  stubScreen('time-trial', 'Time Trial',
-    'A solo qualifying-style session with a ghost car of your best lap, sector analysis and personal bests stored per circuit.',
-    ['Ghost car', 'Sector deltas', 'PBs per circuit'], 'Section 5');
-
-  stubScreen('championship', 'Championship',
-    'Build a custom season from any of the 24 rounds, pick any real driver and fight for a drivers\u2019 and constructors\u2019 title with full F1 points.',
-    ['Custom calendar', 'Sprint points', 'Standings'], 'Section 5');
 
   F1.ui = U;
 })(window.F1 = window.F1 || {});

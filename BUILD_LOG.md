@@ -525,10 +525,77 @@ career*.
 
 ---
 
+## Section 7 — audio, time trial, championship
+
+### `core/audio.js` (new) — 100 % synthesised, no audio files
+Two sawtooth oscillators plus a square sub-octave feed a lowpass and a soft
+waveshaper; a band-passed noise voice adds turbo spool, a second adds tyre scrub
+(level from slip, centre frequency from surface), a third is wind (speed), a
+fourth is the crowd (excitement from nearby cars). Each chain has its own bus
+(`engine`, `tyres`, `crowd`, `ui`, `engineer`) into a compressor and a master
+gain. No `AudioContext` is built at boot: `core/app.js` arms a one-shot
+`pointerdown | keydown | touchstart` listener that constructs and resumes the
+context, which is what browsers require.
+
+- `F1.audio.update({rpm, throttle, speed, slip, latG, surface, excitement})` is
+  fed from `game/session.js` after each render.
+- `beep(kind)` sounds the chassis radio squelch, UI clicks, the start-light
+  tones, the chequered flag and penalty chimes.
+- `radio(text)` emits `radio-message` on `F1.bus`; `ui/hud.js` types it out at
+  ~40 ms/char under an `ENGINEER` chip and leaves it for four seconds.
+- The **race engineer** now calls the first lap, half distance, the final lap,
+  every flag change, pit entry and the pit stop, rate limited to one line every
+  3.2 s (flag calls ignore the limit).
+- **M** mutes anywhere (`body.audio-muted` chip in menus, `.hud-mute` in the
+  session) and the setting persists; the mixer rows in Settings write straight
+  into the live graph (`applyVolumes()` is finite-guarded, so a corrupted save
+  cannot throw).
+
+### Time trial (`ui/timetrial.js`, new)
+Solo three-lap screen per circuit, a PB stored per circuit in `localStorage`,
+a searchable circuit list and a PB board. The **ghost** is the pose trace the
+session records at 10 Hz every lap (`St.ghostRec`); the best lap keeps its trace
+(`session.ghost`) and the screen stores it the moment the lap is banked, so
+quitting early cannot lose it. A fresh session with `params.ghost` rebuilds the
+car, makes every material 42 % opaque and depth-write-free, and interpolates
+between trace points on the clock. Verified: a 1:44.007 lap is saved, 974
+points, appears on the screen as the PB, and the ghost mesh reappears in the
+next session at exactly the spline position its timestamp predicts.
+
+### Championship (`game/championship.js`, `ui/championship.js`, new)
+Any driver, any subset of the 22 rounds, sprint points on or off. Setup is a
+team-grouped driver list and a two-column round grid; the hub shows round,
+position, points, leader, the next round, drivers' and constructors' tables,
+plus *Race this round* and *Simulate*. Every other car is simulated from the
+weekend's reference pace with a small form term; finishing a round writes the
+result into `champ_active` through `F1.championshipScreen.record` and the
+results card offers *Back to championship*.
+
+**Exit test** (headless Chromium, `file://`)
+- All ten `beep` kinds and an unknown kind: no throw; `suspend()`/`resume()`
+  round-trip to `suspended`/`running`; mute survives a reload.
+- Live engine feed at 13 944 rpm: engine gain 0.43, filter 682 Hz, master 0.72;
+  muted master 0, unmuted 0.72; settings sliders move the same graph (master
+  40 % → 0.36).
+- Engineer: "First lap done. P1. Push on." fires on the lap after lights-out.
+- Time trial round-trip as above; championship: P1 (25 pts) and P5 with a
+  simulated sprint (12 pts) → table of 22 drivers / 11 constructors, next
+  round correct; a 4-lap round finishing P3 banks 15 points and returns to a
+  hub pointing at the next circuit.
+- Regression harness unchanged and clean: 21-car grid, pit stop, all five
+  flags, replay + photo, 22-car classification, paddock, formation lap.
+- No page errors, no console errors.
+
+### Size audit
+74 files, **1.7 MB** excluding `.git` (3.0 MB with it). Largest: `lib/three.min.js`
+637 KB, `world/environment.js` 87 KB, `css/ui.css` 43 KB, `game/session.js`
+41 KB. Every `data/circuits/<id>.js` is well under the 20 KB target.
+
+---
+
 ## Next steps (queue)
-1. Section 7: audio (engine, tyres, crowd, UI, engineer), championship screen,
-   time trial with ghost, polish and the size audit.
-2. Section 8: README/README.txt, final size + `file://` verification.
+1. Section 8: README.md/README.txt (controls, structure, size budget table,
+   circuit accuracy list), final size and `file://` no-console-error run.
 3. Open: Monaco AI still touches the barrier at Rascasse (steering saturates at
    0.38 while the command is 1.0); field pace is ~20 % off real-world lap times
    because the tyre model, not the profile, is the limit.

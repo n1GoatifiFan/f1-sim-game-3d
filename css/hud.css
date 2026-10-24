@@ -751,3 +751,25 @@ body[data-camera="tcam"] .hud-tyres { bottom: calc(var(--hud-pad) + 6px); }
 .pause-card { max-height: calc(100vh - 60px); overflow-y: auto; }
 .pause-card::-webkit-scrollbar { width: 6px; }
 .pause-card::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 3px; }
+
+/* engineer radio line: a squelch chip, typed out by ui/hud.js */
+.hud-radio b {
+  font-family: var(--cond); font-size: 10px; letter-spacing: 0.18em;
+  color: var(--red); margin-right: 10px; vertical-align: 1px;
+}
+.hud-radio.typing { border-left-color: var(--amber, #f2b31a); }
+.hud-radio.typing b::after {
+  content: ''; display: inline-block; width: 4px; height: 4px; margin-left: 4px;
+  border-radius: 50%; background: currentColor; animation: radio-pip 0.8s steps(2) infinite;
+}
+@keyframes radio-pip { 50% { opacity: 0.15; } }
+
+/* sound-off chip inside the HUD: only visible while muted */
+.hud-mute {
+  position: absolute; left: 50%; transform: translateX(-50%) translateY(-6px);
+  top: calc(var(--hud-pad) + 140px);
+  font-family: var(--cond); font-size: 10px; letter-spacing: 0.16em;
+  color: #0b0d10; background: var(--amber, #f2b31a); padding: 2px 8px; border-radius: 3px;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.hud-mute.on { opacity: 0.92; transform: translateX(-50%) translateY(0); }

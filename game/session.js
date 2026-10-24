@@ -119,6 +119,24 @@
       /* ---------------- pit lane ---------------- */
       var pitLane = F1.pitlane ? F1.pitlane.build(track) : null;
 
+      /* ---------------- ghost car (time trial) ---------------- */
+      var ghostMesh = null, ghostData = params.ghost || null;
+      if (ghostData && ghostData.pts && ghostData.pts.length > 3) {
+        ghostMesh = F1.buildCar({ teamId: teamId, driverId: driverId, lod: 0 });
+        ghostMesh.traverse(function (o) {
+          if (o.isMesh) {
+            o.castShadow = false; o.receiveShadow = false;
+            if (o.material) {
+              o.material = o.material.clone();
+              o.material.transparent = true;
+              o.material.opacity = 0.42;
+              o.material.depthWrite = false;
+            }
+          }
+        });
+        world.group.add(ghostMesh);
+      }
+
       /* ---------------- rain ---------------- */
       var rainFx = F1.weatherfx ? F1.weatherfx.create(sceneApi.scene) : null;
 
@@ -172,6 +190,9 @@
         results: null,
         warnings: 0,
         blueFlag: false,
+        ghostRec: [],
+        bestGhost: null,
+        ghostT: 0,
         formCrossed: false,
         formLastS: gridPos.s,
         ambientC: params.ambientC === undefined ? 22 : params.ambientC
@@ -293,6 +314,7 @@
         if (!St.bestLap || lap < St.bestLap) {
           St.bestLap = lap;
           St.bestLapTrace = St.trace.slice();
+          St.bestGhost = { time: +lap.toFixed(3), pts: St.ghostRec.slice() };
           for (var i = 0; i < 3; i++) {
             if (!St.bestSectors[i] || St.lastSectors[i] < St.bestSectors[i]) St.bestSectors[i] = St.lastSectors[i];
           }
@@ -300,8 +322,14 @@
         } else {
           say('Lap ' + F1.util.fmtTime(lap));
         }
+        F1.bus.emit('lap-complete', { lap: lap, best: St.bestLap, lapIndex: St.lap });
         St.lap++;
+        if (St.lap === 2) radio('First lap done. ' + (St.position ? 'P' + St.position + '. ' : '') + 'Push on.', true);
+        if (lapsTotal > 2 && St.lap === Math.ceil(lapsTotal / 2)) radio('Half distance. Half distance.', true);
+        if (St.lap === lapsTotal) radio('Final lap. Final lap. Bring it home.', true);
         St.lapTime = 0;
+        St.ghostRec = [];
+        St.ghostT = 0;
         St.sector = 0;
         St.sectorStart = 0;
         St.sectorTimes = [0, 0, 0];
@@ -380,6 +408,7 @@
       function finish() {
         St.state = 'finished';
         St.finishTime = St.time;
+        F1.audio && F1.audio.beep('chequered');
         St.results = classify();
         St.position = playerRow.position || St.position;
         say('Chequered flag \u00b7 P' + St.position);
@@ -395,6 +424,15 @@
         St.messageTimer = 3.0;
       }
 
+      /* the race engineer: a radio line, rate limited so the HUD stays legible.
+         Critical calls (flags, the flag itself) ignore the gap. */
+      function radio(msg, force) {
+        if (!msg) return;
+        if (!force && St.time - (St.radioAt || 0) < 3.2) return;
+        St.radioAt = St.time;
+        if (F1.audio) F1.audio.radio(msg);
+      }
+
       /* ---------------- a step of the world ---------------- */
       function physicsStep(inp) {
         /* in the pit lane the car follows the lane rather than the tyre model:
@@ -407,6 +445,7 @@
             St.pitRun.serve(St.pitCompound || car.compound, 20);
             St.stops++;
             say('Box complete \u2014 ' + (St.pitCompound || car.compound) + ' fitted');
+            radio('Box box. ' + String(St.pitCompound || car.compound).toUpperCase() + ' fitted, go go go.');
           }
           if (St.pitRun.done) {
             St.pitRun = null;
@@ -441,6 +480,7 @@
           St.pitting = true;
           St.pitCompound = St.pitCompound || 'hard';
           say('Pit lane \u2014 80 km/h');
+          radio('Pit lane. Pit lane. Speed limit 80.');
         }
 
         if (St.state === 'racing') {
@@ -473,6 +513,15 @@
               say('Terminal damage \u2014 retirement');
               finish();
             }
+          }
+
+          /* ghost trace: 10 Hz of pose for the whole lap */
+          St.ghostT += STEP;
+          if (St.ghostT >= 0.1) {
+            St.ghostT = 0;
+            St.ghostRec.push([+St.lapTime.toFixed(3), +car.x.toFixed(2), +car.y.toFixed(2),
+              +car.z.toFixed(2), +car.heading.toFixed(4)]);
+            if (St.ghostRec.length > 1800) St.ghostRec.shift();
           }
 
           /* track limits: a warning after 1.5 s off the road in one go, and
@@ -512,6 +561,7 @@
             initTraceAtCar();
             say('Lights out and away we go');
             F1.bus.emit('lights-out');
+            F1.audio && F1.audio.beep('go');
           }
           return;
         }
@@ -611,6 +661,13 @@
             if (rc) {
               rcCtx.state = 'racing';
               rc.update(STEP, rcCtx);
+              if (rc.flag !== St.flag) {
+                if (rc.flag === 'yellow') radio('Yellow flag ahead. Be ready to slow.', true);
+                else if (rc.flag === 'vsc') radio('Virtual safety car. Delta positive, hold the pace.', true);
+                else if (rc.flag === 'sc') radio('Safety car. Safety car. Catch the pack.', true);
+                else if (rc.flag === 'red') radio('Red flag. Red flag. Slow down and return to the pit lane.', true);
+                else if (St.flag === 'sc' || St.flag === 'vsc') radio('Track is green. Go, go, go.', true);
+              }
               St.flag = rc.flag;
             }
             if (field) {
@@ -625,6 +682,7 @@
 
         var alpha = acc / STEP;
         render(alpha);
+        feedAudio();
         if (rp) rp.record(dt);
         world.setShadowFocus && world.setShadowFocus(cams.focus.x, cams.focus.z);
         pushHud();
@@ -652,6 +710,25 @@
           w.spin.rotation.x = wheelSpinV;
         }
 
+        if (ghostMesh && ghostData) {
+          var gt = St.started ? St.lapTime : 0;
+          var pts = ghostData.pts;
+          // linear search is fine: the trace is ~10 Hz for one lap
+          var gi = 0;
+          while (gi < pts.length - 2 && pts[gi + 1][0] < gt) gi++;
+          var a0 = pts[gi], a1 = pts[Math.min(gi + 1, pts.length - 1)];
+          var span = Math.max(1e-4, a1[0] - a0[0]);
+          var gf = F1.util.clamp((gt - a0[0]) / span, 0, 1);
+          ghostMesh.position.set(
+            a0[1] + (a1[1] - a0[1]) * gf - track.origin.x,
+            a0[2] + (a1[2] - a0[2]) * gf,
+            a0[3] + (a1[3] - a0[3]) * gf - track.origin.z);
+          var gh = a0[4];
+          var dh = a1[4] - a0[4];
+          while (dh > Math.PI) dh -= Math.PI * 2;
+          while (dh < -Math.PI) dh += Math.PI * 2;
+          ghostMesh.rotation.y = gh + dh * gf + Math.PI;
+        }
         if (field) field.render(alpha);
         if (rainFx) {
           rainFx.setIntensity(rc ? rc.weather.rainIntensity : 0);
@@ -670,6 +747,33 @@
         cams.update(sceneApi.camera, 1 / 60, camCar, {
           lookBack: held.lookBack,
           shake: car.surface === 'grass' || car.surface === 'gravel' ? 0.5 : 0
+        });
+      }
+
+      /* ---------------- audio feed ---------------- */
+      /* One call per frame with the numbers the synthesiser needs. The crowd
+         gets an "excitement" value from how close the racing is: a pass or a
+         spin lifts it, a quiet lap lets it settle. */
+      var excite = 0;
+      function feedAudio() {
+        if (!F1.audio || !F1.audio.ready) return;
+        var near = 0;
+        if (field) {
+          for (var i = 0; i < field.cars.length; i++) {
+            var c = field.cars[i].car;
+            var ds = c.s - car.s;
+            if (ds > track.length * 0.5) ds -= track.length;
+            if (ds < -track.length * 0.5) ds += track.length;
+            var d = Math.abs(ds) + Math.abs(c.lateral - car.lateral) * 2;
+            if (d < 40) near = Math.max(near, 1 - d / 40);
+          }
+        }
+        var thr = excite * 0.5 + near * 0.35 + (St.state === 'racing' && Math.abs(car.latG || 0) > 2 ? 0.2 : 0);
+        excite += (Math.min(1, thr) - excite) * 0.02;
+        F1.audio.update({
+          rpm: car.rpm, throttle: car.throttle, speed: Math.abs(car.vx) * 3.6,
+          slip: car.slipRatio, latG: car.latG, surface: car.surface,
+          excitement: excite
         });
       }
 
@@ -791,6 +895,8 @@
         if (St.state === 'finished') p = false;
         St.paused = !!p;
         F1.input.enabled = !St.paused;
+        /* idle the engine rather than cutting it: silence is jarring */
+        if (F1.audio && St.paused) F1.audio.updateIdle();
       }
 
       function resetCar() {
@@ -911,6 +1017,7 @@
           window.removeEventListener('wheel', mouseHandler);
           mouseHandler = null;
         }
+        if (ghostMesh && ghostMesh.parent) ghostMesh.parent.remove(ghostMesh);
         if (mesh.parent) mesh.parent.remove(mesh);
         F1.input.enabled = true;
       }
@@ -928,6 +1035,16 @@
         field: field, raceControl: rc, pitLane: pitLane, replay: rp,
         toggleReplay: toggleReplay, setReplaySpeed: setReplaySpeed,
         get photoMode() { return !!(rp && rp.photo.active); },
+        get ghost() { return St.bestGhost; },
+        get hasGhost() { return !!ghostMesh; },
+        get ghostPos() {
+          return ghostMesh ? { x: +ghostMesh.position.x.toFixed(1), z: +ghostMesh.position.z.toFixed(1),
+            visible: ghostMesh.visible, opacity: (function () {
+              var o = null;
+              ghostMesh.traverse(function (m) { if (o == null && m.isMesh && m.material) o = m.material.opacity; });
+              return o;
+            })() } : null;
+        },
         get results() { return St.results; },
         get flag() { return rc ? rc.flag : 'green'; },
         get weather() { return rc ? rc.weather : null; },

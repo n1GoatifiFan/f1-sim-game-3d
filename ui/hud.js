@@ -56,8 +56,35 @@
       var radio = node('div', 'hud-radio');
       wrap.appendChild(radio);
 
+      /* the race engineer talks in typed text: a fresh line cancels whatever
+         was still being typed, then the line sits for a few seconds */
+      var sayTimer = null, sayTick = null;
+      function say(text, who) {
+        if (!radio) return;
+        clearTimeout(sayTimer); clearInterval(sayTick); sayTick = null;
+        radio._last = text;
+        radio.classList.add('show', 'typing');
+        radio.innerHTML = '<b>' + (who || 'ENGINEER') + '</b><span></span>';
+        var span = radio.querySelector('span');
+        var i = 0;
+        sayTick = setInterval(function () {
+          i += 1;
+          span.textContent = text.slice(0, i);
+          if (i >= text.length) {
+            clearInterval(sayTick); sayTick = null;
+            radio.classList.remove('typing');
+            sayTimer = setTimeout(function () { radio.classList.remove('show'); }, 4000);
+          }
+        }, Math.max(12, Math.min(42, 700 / Math.max(12, text.length))));
+      }
+      function onRadio(text) { say(String(text), 'ENGINEER'); }
+      F1.bus.on('radio-message', onRadio);
+
       var flag = node('div', 'hud-flag');
       wrap.appendChild(flag);
+
+      var muteChip = node('div', 'hud-mute', 'SOUND OFF \u00b7 M');
+      wrap.appendChild(muteChip);
 
       /* ------------------------------- top right: tower */
       var tower = node('div', 'hud-tower');
@@ -287,6 +314,8 @@
             radio._t = setTimeout(function () { radio.classList.remove('show'); }, 2600);
           }
 
+          if (muteChip) muteChip.classList.toggle('on', !!(F1.audio && F1.audio.muted));
+
           /* flags */
           var flagText = '';
           if (d.blueFlag) flagText = 'BLUE FLAG';
@@ -442,6 +471,9 @@
           if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
           radio._last = null;
           clearTimeout(radio._t);
+          clearTimeout(sayTimer);
+          clearInterval(sayTick);
+          F1.bus.off('radio-message', onRadio);
           F1.bus.off('hud-cycle', onCycle);
         }
       };

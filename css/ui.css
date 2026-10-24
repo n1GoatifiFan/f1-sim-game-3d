@@ -596,3 +596,108 @@ input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; background: v
 .cs-actions .btn { width: 100%; justify-content: center; }
 .cs-body { overflow: hidden; }
 .cs-note { font-size: 11px; }
+
+/* ------------------------------------------------------------------ */
+/* time trial                                                          */
+/* ------------------------------------------------------------------ */
+.tt-body { flex: 1; display: grid; grid-template-columns: 340px 1fr; gap: 14px; min-height: 0; }
+.tt-list { overflow: auto; }
+.tt-rows { display: flex; flex-direction: column; gap: 3px; }
+.tt-row {
+  display: grid; grid-template-columns: 22px 1fr 74px; gap: 8px; align-items: center;
+  padding: 6px 8px; cursor: pointer; font: inherit; text-align: left; color: var(--text);
+  background: rgba(255, 255, 255, 0.03); border: 1px solid transparent; border-radius: 4px;
+}
+.tt-row:hover { background: rgba(255, 255, 255, 0.08); }
+.tt-row.on { border-color: var(--teal); background: rgba(0, 224, 199, 0.08); }
+.tt-row .r { font-size: 10px; color: var(--muted); }
+.tt-row .n { font-size: 12.5px; }
+.tt-row .pb { font-size: 11px; color: var(--teal); text-align: right; }
+.tt-detail { display: flex; flex-direction: column; gap: 12px; }
+.tt-head { display: flex; align-items: baseline; gap: 12px; }
+.tt-pb { display: flex; gap: 28px; }
+.tt-pb div { display: flex; flex-direction: column; gap: 1px; }
+.tt-pb span { font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.tt-pb b { font-family: var(--cond); font-style: italic; font-size: 22px; }
+.tt-note { font-size: 12px; line-height: 1.55; max-width: 62ch; }
+.tt-car { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: rgba(255, 255, 255, 0.03); border-radius: 4px; }
+.tt-car .sw { width: 4px; height: 16px; border-radius: 2px; }
+.tt-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.tt-board { margin-top: auto; }
+.tt-board h4 { margin: 0 0 6px; font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+.tt-b-row { display: flex; justify-content: space-between; font-size: 11.5px; padding: 2px 0; color: var(--muted); }
+
+/* ------------------------------------------------------------------ */
+/* championship                                                        */
+/* ------------------------------------------------------------------ */
+.champ-body { flex: 1; min-height: 0; display: flex; }
+.champ-setup { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; min-height: 0; }
+.cs-col { display: flex; flex-direction: column; min-height: 0; gap: 8px; }
+.champ-drivers { overflow: auto; display: flex; flex-direction: column; gap: 3px; align-content: start; }
+.cd-team { display: grid; grid-template-columns: 1fr 1fr; column-gap: 10px; row-gap: 1px; }
+.cd-team + .cd-team { margin-top: 4px; }
+.cd-bar { grid-column: 1 / -1; height: 2px; border-radius: 1px; opacity: 0.9; }
+.cd-row {
+  font: inherit; font-size: 11.5px; text-align: left; cursor: pointer; color: var(--muted);
+  background: none; border: 0; border-radius: 3px; padding: 2px 5px;
+}
+.cd-row:hover { background: rgba(255, 255, 255, 0.07); color: var(--text); }
+.cd-row.on { background: rgba(0, 224, 199, 0.14); color: var(--text); box-shadow: inset 2px 0 0 var(--teal); }
+.champ-rounds { overflow: auto; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(11, auto); grid-auto-flow: column; gap: 1px 18px; align-content: start; }
+.cr-row { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); padding: 2px 3px; cursor: pointer; }
+.cr-row:hover { color: var(--text); }
+.cr-row .r { font-size: 9.5px; width: 16px; }
+.cr-row .n { flex: 1; }
+.cr-row .tag { font-size: 8.5px; letter-spacing: 0.1em; color: var(--teal); }
+.cs-actions { margin-top: auto; display: flex; align-items: center; gap: 14px; justify-content: space-between; }
+.cs-actions .btn { min-width: 190px; }
+.champ-grid { flex: 1; display: flex; min-width: 0; }
+.champ-main { flex: 1; display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow: auto; }
+.champ-top { display: flex; gap: 30px; }
+.champ-top div { display: flex; flex-direction: column; gap: 1px; }
+.champ-top .k { font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.champ-top b { font-family: var(--cond); font-size: 20px; font-style: italic; }
+.champ-top .teal { color: var(--teal); }
+.champ-next {
+  display: grid; grid-template-columns: 1fr auto; grid-template-areas: 'r a' 'n a' 'c a';
+  align-items: center; gap: 0 12px; padding: 10px 14px; background: rgba(255, 255, 255, 0.04);
+  border-left: 3px solid var(--teal); border-radius: 3px;
+}
+.champ-next .cn-r { grid-area: r; font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+.champ-next .cn-n { grid-area: n; font-family: var(--cond); font-size: 24px; font-style: italic; line-height: 1.1; }
+.champ-next .cn-c { grid-area: c; font-size: 11px; }
+.champ-next .cn-a { grid-area: a; display: flex; gap: 8px; }
+.champ-next.done { border-left-color: var(--muted); grid-template-areas: 'n a' 'c a'; }
+.champ-tables { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.ct-box h4 { margin: 0 0 5px; font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+.ct-box .ct-list { display: flex; flex-direction: column; gap: 1px; }
+.ct-box.drivers .ct-list { display: block; columns: 2; column-gap: 14px; }
+.ct-box.drivers .ct-row { break-inside: avoid; }
+.ct-box .ct-row {
+  display: grid; grid-template-columns: 20px 3px 1fr auto; gap: 7px; align-items: center;
+  font-size: 11.5px; padding: 2px 4px; border-radius: 3px;
+}
+.ct-box .ct-row .p { font-size: 9.5px; color: var(--muted); text-align: right; }
+.ct-box .ct-row .bar { height: 13px; border-radius: 1px; opacity: 0.8; }
+.ct-box .ct-row .n { color: var(--muted); }
+.ct-box .ct-row b { font-size: 11.5px; }
+.ct-box .ct-row.me { background: rgba(0, 224, 199, 0.1); }
+.ct-box .ct-row.me .n { color: var(--text); }
+.champ-actions { margin-top: auto; display: flex; align-items: center; gap: 14px; }
+.champ-actions .muted { font-size: 10.5px; }
+
+/* mute chip: fixed, top-right under the timing tower, survives all screens */
+body.audio-muted::after {
+  content: 'SOUND OFF \00b7 M';
+  position: fixed; top: 10px; right: 14px; z-index: 60;
+  font-family: var(--cond); font-size: 10px; letter-spacing: 0.16em;
+  color: #0b0d10; background: var(--amber, #f2b31a); padding: 3px 8px; border-radius: 3px;
+  pointer-events: none;
+}
+/* inside a session the HUD draws its own chip; hide the menu one */
+body.audio-muted:has(#screen-root.race-active)::after { display: none; }
+
+.tt-stats { display: flex; gap: 30px; padding: 10px 0; border-top: 1px solid rgba(255, 255, 255, 0.07); border-bottom: 1px solid rgba(255, 255, 255, 0.07); }
+.tt-stats div { display: flex; flex-direction: column; gap: 1px; }
+.tt-stats span { font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.tt-stats b { font-family: var(--cond); font-style: italic; font-size: 17px; }

@@ -130,6 +130,11 @@
   };
   F1.bus.on('toast', function (m) { App.toast(m); });
 
+  /* a small "sound off" chip lives on <body> so it survives every screen */
+  App.setAudioMutedClass = function (on) {
+    document.body.classList.toggle('audio-muted', !!on);
+  };
+
   /* ------------------------------------------------------------------ */
   /* error overlay — makes file:// debugging possible                    */
   /* ------------------------------------------------------------------ */
@@ -210,9 +215,26 @@
   /* ------------------------------------------------------------------ */
   /* startup                                                             */
   /* ------------------------------------------------------------------ */
+  /* audio cannot start before a user gesture: arm it on the first one */
+  function armAudio() {
+    if (!F1.audio) return;
+    var on = function () {
+      F1.audio.init();
+      F1.audio.beep('click');
+      window.removeEventListener('pointerdown', on);
+      window.removeEventListener('keydown', on);
+      window.removeEventListener('touchstart', on);
+    };
+    window.addEventListener('pointerdown', on);
+    window.addEventListener('keydown', on);
+    window.addEventListener('touchstart', on);
+  }
+
   App.init = function () {
     App.installErrorOverlay();
     F1.input.init();
+    armAudio();
+    if (F1.settings.audio.muted) App.setAudioMutedClass(true);
 
     F1.renderer.init(document.getElementById('gl'));
     App.installPerfOverlay();

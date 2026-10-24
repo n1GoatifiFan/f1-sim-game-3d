@@ -59,7 +59,7 @@
       motionBlur: false,
       fov: 62
     },
-    audio: { master: 0.8, engine: 0.9, tyres: 0.7, crowd: 0.5, ui: 0.7, engineer: 0.9, music: 0.4 },
+    audio: { master: 0.8, engine: 0.9, tyres: 0.7, crowd: 0.5, ui: 0.7, engineer: 0.9, music: 0.4, muted: false },
     gameplay: {
       units: 'kmh',                  // 'kmh' | 'mph'
       difficulty: 'balanced',        // 'rookie' | 'balanced' | 'pro' | 'legend' | 'custom'
@@ -87,7 +87,7 @@
       hudScale: 1.0, colorblind: false, showPerformance: false, showMinimap: true,
       broadcastStyle: 'modern', language: 'en', reduceMotion: false, tyreTempC: true
     },
-    career: { myTeam: false, seed: '' }
+    career: { myTeam: false, seed: '', teamId: 'mclaren', driverId: '' }
   };
 
   function merge(base, over) {
