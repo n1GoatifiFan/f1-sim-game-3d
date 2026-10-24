@@ -55,6 +55,7 @@
           '<button class="btn primary" data-act="resume">Resume</button>' +
           '<button class="btn" data-act="restart">Restart session</button>' +
           '<button class="btn" data-act="camera">Change camera</button>' +
+          (params.career ? '<button class="btn" data-act="career">Back to career</button>' : '') +
           (params.weekend ? '<button class="btn" data-act="paddock">Return to paddock</button>' : '') +
           '<button class="btn ghost" data-act="quit">Quit to menu</button>' +
           '</div>' +
@@ -74,6 +75,7 @@
           if (!b) return;
           var act = b.getAttribute('data-act');
           if (act === 'paddock') { recordWeekend(); quit(true); }
+          else if (act === 'career') { recordCareer(); quit('career'); }
           else if (act === 'resume') setPaused(false);
           else if (act === 'restart') restart();
           else if (act === 'camera') { if (session) session.cycleCamera(); }
@@ -98,7 +100,9 @@
       }
 
       function quit(toPaddock) {
-        if (toPaddock && params.weekend) {
+        if (toPaddock === 'career' && params.career) {
+          F1.app.show('career', { career: params.career });
+        } else if (toPaddock && params.weekend) {
           F1.app.show('weekend', {
             weekend: params.weekend,
             circuitId: params.weekend.circuitId,
@@ -172,7 +176,8 @@
           seed: params.seed,
           round: params.round,
           order: params.order,
-          formationLap: params.formationLap
+          formationLap: params.formationLap,
+          field: params.field
         });
         F1.app.raceSession = session;
 
@@ -214,6 +219,23 @@
       function onHud(data) {
         if (hud) hud.update(data);
       }
+      /* a career round writes its result into the career's season */
+      function recordCareer() {
+        if (!params.career || !params.careerRound || params._careerDone) return;
+        if (!session || session.state.state !== 'finished') return;
+        params._careerDone = true;
+        try {
+          F1.career.advance(params.career, params.careerRound, {
+            pos: session.position,
+            retired: !!(session.state && session.state.retired),
+            pole: false
+          });
+          var slot = F1.storage.get('career_active', 1) || 1;
+          F1.career.save(params.career, slot);
+          F1.app.career = params.career;
+        } catch (e) { console.error('[career] advance failed', e); }
+      }
+
       /* a weekend session writes itself back into the paddock */
       function recordWeekend() {
         if (!params.weekend || !params.weekendSession || !session) return;
@@ -232,6 +254,7 @@
 
       function onFinish(info) {
         recordWeekend();
+        recordCareer();
         F1.app.toast('Chequered flag \u00b7 best ' + (info.best ? U.fmtTime(info.best) : '\u2014'));
         setTimeout(function () {
           if (!disposed && session && session.state.state === 'finished') showSummary();
@@ -284,9 +307,11 @@
           '</div>' +
           resultTable(session) +
           '<div class="pause-actions">' +
-          (params.weekend
-            ? '<button class="btn primary" data-act="paddock">Return to paddock</button>'
-            : '<button class="btn primary" data-act="again">Race again</button>') +
+          (params.career
+            ? '<button class="btn primary" data-act="career">Back to career</button>'
+            : params.weekend
+              ? '<button class="btn primary" data-act="paddock">Return to paddock</button>'
+              : '<button class="btn primary" data-act="again">Race again</button>') +
           '<button class="btn" data-act="quit">Back to menu</button>' +
           '</div></div>';
         var hudRoot = document.getElementById('hud-root');
@@ -296,6 +321,7 @@
           if (!b) return;
           var act = b.getAttribute('data-act');
           if (act === 'again') restart();
+          else if (act === 'career') { recordCareer(); quit('career'); }
           else if (act === 'paddock') {
             recordWeekend();
             quit(true);

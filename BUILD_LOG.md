@@ -427,13 +427,108 @@ the numbers each frame.
 
 ---
 
+## Section 5 — weekend, formation lap, replay, photo mode
+
+### `game/weekend.js` (new)
+A weekend is data: `fp1 fp2 fp3 q1 q2 q3 race` for a standard round and
+`fp1 sq sprint q1 q2 q3 race` for a sprint round. Each session carries its own
+result list and state. Qualifying really knocks out — Q1 runs all 22 drivers and
+only the fastest 15 reach Q2, ten reach Q3 — and the grid for the race is built
+from that survivor list, so knocking out in Q1 starts you 16th. AI times come
+from the same speed profile the on-track field uses, plus a per-session wobble
+and a 14 % chance of a dirty lap. `points()` is the single source of the 25-18-15
+… and 8-7-6-5-4-3-2-1 tables (fastest lap is deliberately not rewarded).
+
+### `ui/weekend.js` (new)
+The paddock: session list on the left (done / next / selected), timing on the
+right, a provisional grid, and *Drive* / *Simulate* for the next session. Every
+session started from here hands the race screen an explicit grid order, so a
+qualifying result actually decides the grid. Results written back by the race
+screen are stored on the weekend object, which is what makes "return to paddock"
+work after a race.
+
+### Formation lap and re-grid
+A grand prix started with `formationLap: true` begins in a `formation` state:
+the field rolls round at 60 % pace with the player's car driven for them, no lap
+timing runs, and the moment the car crosses the line `field.regrid()` puts all
+22 cars back on their slots and the lights start. The HUD says FORMATION LAP
+instead of a countdown.
+
+### `game/replay.js` (new)
+A 12 Hz ring buffer of 95 s holding position, heading, steering, wheel spin and
+lateral g for all 22 cars. `T` rewinds 14 s and plays it back with the meshes
+and the camera interpolated between samples; the HUD shows a REPLAY badge. Photo
+mode (`V`) freezes the simulation through a frame guard (not the pause menu),
+hands the camera to a mouse-driven orbit rig and dims the HUD; `J` re-renders and
+downloads a PNG (the drawing buffer is not preserved, so it must be re-rendered
+immediately before the read).
+
+### Fixes found by the section-5 harness
+- **Steering was mirrored**: the physics wants a positive angle to turn *left*
+  (that is how the AI's Stanley controller is written) while the keyboard read
+  right as positive. The negation now happens once, in `core/input.js`.
+- The pause key was bound to `KeyP`, which shadowed the pit request; pause is
+  now `Esc` only.
+- `ui/race.js` compared `session.state` (an object) to `'finished'` in six
+  places, so the results card never appeared, `Enter` did nothing and the pause
+  panel never hid. All of them read `session.state.state` now.
+- The timing tower rebuilt its rows only when the row count changed, so gaps
+  froze; it now caches the elements and rewrites the numbers per frame, shows
+  metres before the first lap time exists, seconds after it, and `+N LAPS` for
+  lapped cars.
+- The finish banner and the results card stacked on top of each other; the card
+  now hides the banner and the card scrolls if the table is long.
+
+---
+
+## Section 6 — career
+
+`game/career.js` is a career as plain JSON: identity, team, contract, season,
+results, championship points, R&D levels, market and history. It is deterministic
+from its seed, so a save reloads into exactly the same state.
+
+- **Create a driver** (name, code, number, country, 76 overall, backmarker deal)
+  or **take a real seat** (the driver's rating, team and contract come with it).
+- **Team offers** are gated by rating: a team of strength S will talk to a driver
+  of S−8 or better, so a rookie sees Aston Martin down while McLaren is locked.
+- **Rounds** advance from the real result: points (25-18-15…), a race fee, a
+  reputation nudge, and a simulated rest-of-field so the championship table is
+  consistent with the weekend's reference pace.
+- **Season end** checks the contract objective, pays a prize, records history,
+  rolls the season over and opens the **market** (offers scaled by finishing
+  position and reputation). Signing swaps the team and contract.
+- **R&D**: five departments (aero, power, chassis, reliability, pit crew), eight
+  levels each, cost rising 55 % per level. Levels are written straight into
+  `team.performance`, so an upgraded car really is faster in the physics and the
+  AI field.
+- **Saves**: three slots in `localStorage` (with the memory fallback the rest of
+  the game uses), a slot list with name / team / season / position / credits, and
+  **JSON export/import** through a downloaded file and a file picker.
+
+### `ui/career.js` (new)
+`career-setup` (the create/real/team picker) and `career` (the hub: next race,
+championship, R&D, market, saves, contract, the 22-round grid). A career race
+writes itself back on the chequered flag and the results card offers *Back to
+career*.
+
+**Exit test** (headless Chromium, `file://`)
+- Create a driver → 11 teams listed, 5 locked at 76 overall → sign with Cadillac
+  → hub renders the next race, the 22-round grid and the contract.
+- R&D: investing in aero takes the team from 68 to 69 and the cost from 340 up.
+- Save → reload → same name; export → import round-trips; three slots list.
+- A full 22-round season runs through to the market: champion, prize paid,
+  contract expired, six offers waiting.
+- A career race: 2 laps, chequered flag, round advances 1 → 2, 25 points banked
+  (not double-counted), credits paid, *Back to career* returns to the hub with
+  the next race on screen.
+- No page errors, no console errors.
+
+---
+
 ## Next steps (queue)
-1. Section 5: weekend formats (FP1–FP3, Q1–Q3, sprint), formation lap, full
-   classification with retirements, replays and photo mode.
-2. Section 6: career (create driver, contracts, R&D, market, three save slots,
-   JSON export/import).
-3. Section 7: audio, rain-follow-on polish, size audit.
-4. Section 8: README/README.txt, final size + `file://` verification.
-5. Open: Monaco AI still touches the barrier at Rascasse (steering saturates at
+1. Section 7: audio (engine, tyres, crowd, UI, engineer), championship screen,
+   time trial with ghost, polish and the size audit.
+2. Section 8: README/README.txt, final size + `file://` verification.
+3. Open: Monaco AI still touches the barrier at Rascasse (steering saturates at
    0.38 while the command is 1.0); field pace is ~20 % off real-world lap times
    because the tyre model, not the profile, is the limit.

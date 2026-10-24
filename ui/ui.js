@@ -700,10 +700,6 @@
     };
   }
 
-  stubScreen('career', 'Career',
-    'Create a driver or take over one of the 22 seats, then run the 2026 season with contracts, objectives, an R&amp;D tree, a driver market and up to ten seasons of saves.',
-    ['Create-a-driver', 'Real driver', 'Contracts', 'R&amp;D', 'Driver market', '3 save slots'], 'Section 6');
-
   stubScreen('time-trial', 'Time Trial',
     'A solo qualifying-style session with a ghost car of your best lap, sector analysis and personal bests stored per circuit.',
     ['Ghost car', 'Sector deltas', 'PBs per circuit'], 'Section 5');

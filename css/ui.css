@@ -456,3 +456,143 @@ input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; background: v
 .wkd-actions .spacer { flex: 1; }
 .wkd-complete { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
 .wkd-right { display: flex; align-items: center; gap: 8px; }
+
+/* ------------------------------------------------------------------ */
+/* career setup                                                        */
+/* ------------------------------------------------------------------ */
+.cs-body { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; min-height: 0; }
+.cs-left, .cs-right { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: auto; }
+.cs-tabs { display: flex; gap: 6px; margin-bottom: 6px; }
+.cs-tabs button {
+  flex: 1; padding: 8px 10px; cursor: pointer; font: inherit; font-size: 11.5px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+  background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line); border-radius: 4px;
+}
+.cs-tabs button.on { color: #fff; border-color: rgba(255, 255, 255, 0.4); background: rgba(255, 255, 255, 0.09); }
+.cs-field { display: flex; flex-direction: column; gap: 4px; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.cs-field input, .cs-field select {
+  font: inherit; font-size: 14px; letter-spacing: 0.02em; text-transform: none; color: var(--text);
+  padding: 8px 10px; background: rgba(0, 0, 0, 0.35); border: 1px solid var(--line-strong); border-radius: 4px;
+}
+.cs-field input:focus, .cs-field select:focus { outline: 2px solid rgba(0, 224, 199, 0.5); outline-offset: 1px; }
+.cs-row { display: grid; grid-template-columns: 1fr 90px 100px; gap: 8px; }
+.cs-note { font-size: 11.5px; line-height: 1.55; margin: 4px 0 0; }
+
+.cs-teams { display: flex; flex-direction: column; gap: 4px; }
+.cs-team {
+  display: grid; grid-template-columns: 3px 1fr 34px 74px 16px; align-items: center; gap: 9px;
+  padding: 7px 9px; cursor: pointer; font: inherit; text-align: left; color: var(--text);
+  background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line); border-radius: 4px;
+}
+.cs-team:hover:not(.locked) { background: rgba(255, 255, 255, 0.08); }
+.cs-team.on { border-color: var(--teal); background: rgba(0, 224, 199, 0.1); }
+.cs-team.locked { opacity: 0.35; cursor: not-allowed; }
+.cs-team .sw { width: 3px; height: 15px; border-radius: 1px; display: inline-block; }
+.cs-team .n { font-family: var(--cond); font-style: italic; font-weight: 700; font-size: 14px; }
+.cs-team .st { font-size: 11px; color: var(--muted); }
+.cs-team .sal { font-size: 11px; color: var(--teal); text-align: right; }
+.cs-team .lock { color: var(--red-soft); font-size: 11px; }
+.cs-summary { display: flex; gap: 22px; padding: 10px 0 4px; border-top: 1px solid var(--line); margin-top: auto; }
+.cs-summary div { display: flex; flex-direction: column; gap: 2px; }
+.cs-summary span { font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.cs-summary b { font-size: 16px; font-family: var(--cond); font-style: italic; }
+
+/* ------------------------------------------------------------------ */
+/* career hub                                                          */
+/* ------------------------------------------------------------------ */
+.career-hero-wrap { margin-bottom: 12px; }
+.career-hero { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.ch-team { display: flex; align-items: center; gap: 10px; }
+.ch-team .sw { width: 4px; height: 34px; border-radius: 2px; }
+.ch-team b { display: block; font-family: var(--cond); font-style: italic; font-size: 24px; line-height: 1.05; }
+.ch-team span { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.ch-stats { display: flex; gap: 26px; }
+.ch-stats div { display: flex; flex-direction: column; gap: 1px; text-align: right; }
+.ch-stats span { font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.ch-stats b { font-size: 15px; font-family: var(--cond); font-style: italic; }
+
+.career-body { flex: 1; display: grid; grid-template-columns: 1fr 320px; gap: 14px; min-height: 0; }
+.career-main, .career-side { display: flex; flex-direction: column; gap: 10px; overflow: auto; min-height: 0; padding-bottom: 8px; }
+.career-card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px;
+}
+.career-card h3 {
+  margin: 0 0 10px; font-family: var(--cond); font-style: italic; font-weight: 800;
+  font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+}
+.next-race { display: flex; align-items: center; gap: 14px; }
+.next-race .cc {
+  padding: 5px 9px; border-radius: 3px; background: var(--red); color: #fff;
+  font-family: var(--cond); font-style: italic; font-weight: 800; font-size: 13px;
+}
+.nr-main { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.nr-main b { font-family: var(--cond); font-style: italic; font-size: 22px; }
+.nr-main span { font-size: 11px; color: var(--muted); letter-spacing: 0.04em; }
+.nr-actions { display: flex; gap: 6px; }
+
+.ctable { display: flex; flex-direction: column; gap: 1px; }
+.ct-row, .ft-row { display: grid; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 3px; font-size: 12px; }
+.ct-row { grid-template-columns: 20px 3px 1fr 44px; }
+.ft-row { grid-template-columns: 24px 3px 1fr 90px 52px; }
+.ct-row:nth-child(odd), .ft-row:nth-child(odd) { background: rgba(255, 255, 255, 0.025); }
+.ct-row.me, .ft-row.me { background: rgba(225, 6, 0, 0.22); }
+.ct-row .sw, .ft-row .sw { width: 3px; height: 12px; border-radius: 1px; display: inline-block; }
+.ct-row .p, .ft-row .p { color: var(--muted); font-size: 10.5px; }
+.ct-row .n { font-weight: 600; letter-spacing: 0.08em; }
+.ft-row .t { color: var(--muted); font-size: 11px; }
+.ct-row .pts, .ft-row .pts { text-align: right; font-weight: 600; }
+
+.rnd-list { display: flex; flex-direction: column; gap: 7px; }
+.rnd-row { display: grid; grid-template-columns: 1fr 100px 84px; gap: 10px; align-items: center; }
+.rnd-name { display: flex; flex-direction: column; gap: 1px; }
+.rnd-name b { font-size: 12.5px; font-weight: 600; }
+.rnd-name span { font-size: 10px; color: var(--muted); }
+.bar { display: block; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.bar b { display: block; height: 100%; background: var(--teal); border-radius: 3px; }
+
+.market { display: flex; flex-direction: column; gap: 5px; }
+.mk-row { display: grid; grid-template-columns: 3px 1fr 130px 80px 60px; gap: 9px; align-items: center; font-size: 12px; }
+.mk-row .sw { width: 3px; height: 14px; border-radius: 1px; }
+
+.slots { display: flex; flex-direction: column; gap: 8px; }
+.slot { border: 1px solid var(--line); border-radius: 5px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.slot.empty { opacity: 0.6; }
+.slot.on { border-color: rgba(0, 224, 199, 0.45); }
+.slot-head { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; }
+.slot-body { display: flex; flex-direction: column; gap: 1px; font-size: 11.5px; }
+.slot-body b { font-family: var(--cond); font-style: italic; font-size: 15px; }
+.slot-body span { color: var(--muted); }
+.slot-actions { display: flex; gap: 6px; }
+.slot-io { display: flex; gap: 8px; margin-top: 12px; }
+.slot-io .btn { cursor: pointer; }
+
+.career-nav { display: flex; gap: 5px; }
+.career-nav .btn.on { background: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.35); }
+.career-right { display: flex; align-items: center; gap: 8px; }
+.career-grid { display: flex; flex-direction: column; gap: 1px; }
+.cg-row {
+  display: grid; grid-template-columns: 20px 1fr 34px; gap: 7px; align-items: center;
+  padding: 3px 5px; border-radius: 3px; font-size: 11.5px; color: var(--muted);
+}
+.cg-row .r { font-size: 10px; text-align: right; }
+.cg-row.done { color: var(--text); }
+.cg-row.done .tick { color: var(--teal); font-size: 10px; text-align: right; }
+.cg-row.next { background: rgba(255, 255, 255, 0.07); color: #fff; }
+.cg-row .now { font-size: 8.5px; letter-spacing: 0.1em; color: var(--red-soft); text-align: right; }
+.contract { display: flex; flex-direction: column; gap: 4px; }
+.co-team { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.co-team .sw { width: 4px; height: 16px; border-radius: 2px; }
+.co-team b { font-family: var(--cond); font-style: italic; font-size: 16px; }
+.co-row { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); }
+.co-row span:last-child { color: var(--text); }
+
+/* the setup screen must fit 720 px: tighten it and keep the CTA visible */
+.cs-left, .cs-right { padding: 14px 16px; }
+.cs-teams { gap: 3px; }
+.cs-team { padding: 5px 9px; }
+.cs-team .n { font-size: 13px; }
+.cs-summary { padding: 8px 0 2px; }
+.cs-actions { margin-top: 8px; }
+.cs-actions .btn { width: 100%; justify-content: center; }
+.cs-body { overflow: hidden; }
+.cs-note { font-size: 11px; }
