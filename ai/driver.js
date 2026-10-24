@@ -158,10 +158,31 @@
     var recState = 'run';     // run | reverse | recover
     var recT = 0;             // seconds left in the current recovery phase
     var recCycles = 0;        // failed recovery attempts in a row
+    var gapAhead = Infinity;  // metres to the car in front (field.js)
+    var vLead = 0;            // that car's speed, m/s
+    var limit = 0;            // m/s cap (safety car / VSC), 0 = none
+    var wetMul = 1;           // target-speed scale in the rain
+    var avoid = 0;            // metres of lateral shift to go round it
 
     var drv = {
       input: { steer: 0, throttle: 0, brake: 0, boost: false },
       line: null,
+      debug: {},          // sampled state, used by the AI debug overlay
+
+      /* race-traffic feed. The AI itself never sees other cars: game/field.js
+         measures the gap and asks for a lane. The result is queuing behind a
+         slower car until there is room to go round, not driving through it. */
+      setTraffic: function (gap, side, leadSpeed) {
+        gapAhead = gap; avoid = side;
+        vLead = leadSpeed || 0;
+      },
+
+      /* safety car / VSC delta: the AI actually obeys the speed limit */
+      setLimit: function (mps) { limit = mps > 0 ? mps : 0; },
+
+      /* a wet track is slower for everybody; the AI uses the same grip the
+         player does, so the field spreads the same way a real one would */
+      setWetness: function (w) { wetMul = 1 - Math.max(0, Math.min(1, w || 0)) * 0.42; },
 
       /* pure pursuit: aim at a point on the centreline ahead, then let the
          steering geometry do the rest. Look-ahead grows with speed. */
@@ -175,6 +196,11 @@
         /* racing line: the aim point drifts to the inside of the corner that
            is coming up, and back to the middle on the straights */
         var lat = laneBias + prof.lineAt(car.s + ld * 0.5) * (0.45 + aggression * 0.55);
+        if (avoid !== 0 && gapAhead < 45) {
+          lat += avoid * clamp(1 - gapAhead / 45, 0.2, 1);
+          var lim = prof.laneMax ? prof.laneMax[track.indexAt(car.s)] : maxLane;
+          lat = clamp(lat, -lim, lim);
+        }
 
         var sAim = track.wrapS(car.s + ld);
         var aim = track.at(sAim, temp);
@@ -241,6 +267,8 @@
           inpR.brake = 1;
           inpR.boost = false;
           if (recT <= 0) { recState = 'recover'; recT = 3.0; }
+          drv.debug.state = recState;
+          drv.debug.brake = 1;
           return inpR;
         }
         if (recState === 'recover') {
@@ -254,10 +282,23 @@
            travel). So the braking decision is made from the *deceleration
            needed over the next 20 m*, which starts the stop exactly when the
            car needs it — the same way a driver reads a braking board. */
-        var vTarget = prof.sampleAt(car.s) * (0.93 + skill * 0.07) *
+        var vTarget = prof.sampleAt(car.s) * (0.93 + skill * 0.07) * wetMul *
           (opts.pace === undefined ? 1 : opts.pace);
-        var vAhead = prof.sampleAt(car.s + 20) * (0.93 + skill * 0.07) *
+        var vAhead = prof.sampleAt(car.s + 20) * (0.93 + skill * 0.07) * wetMul *
           (opts.pace === undefined ? 1 : opts.pace);
+        if (gapAhead < 28) {
+          /* Follow the car in front rather than teleporting through it: hold
+             about seven metres, and never drop far below its speed or the
+             gap opens into a permanent queue. */
+          var follow = vLead + (gapAhead - 7) * 1.6;
+          follow = Math.max(follow, vLead * 0.9);
+          vTarget = Math.min(vTarget, follow);
+          vAhead = Math.min(vAhead, follow);
+        }
+        if (limit > 0 && vTarget > limit) {
+          vTarget = limit;
+          vAhead = Math.min(vAhead, limit);
+        }
         if (offNow || recState === 'recover') {
           var crawl = recState === 'recover' ? 9 : 16;
           vTarget = Math.min(vTarget, crawl);
@@ -297,6 +338,12 @@
         inp.brake = brake;
         inp.boost = aggression > 0.6 && speed > 60 && car.ers > 0.4;
         car.ersMode = 'balanced';
+        drv.debug.state = recState;
+        drv.debug.speed = speed;
+        drv.debug.vTarget = vTarget;
+        drv.debug.gap = gapAhead;
+        drv.debug.brake = brake;
+        drv.debug.throttle = throttle;
         return inp;
       }
     };

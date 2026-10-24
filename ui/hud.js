@@ -188,6 +188,8 @@
         '<span>S1</span><span>S2</span><span>S3</span>' +
         '</div>';
       wrap.appendChild(timing);
+      var penEl = node('div', 'hud-pen');
+      timing.appendChild(penEl);
       var lastEl = timing.querySelector('#hud-last');
       var bestEl = timing.querySelector('#hud-best');
       var sectorEls = Array.prototype.slice.call(timing.querySelectorAll('.t-sectors span'));
@@ -195,6 +197,13 @@
       /* ------------------------------- centre overlays */
       var big = node('div', 'hud-big');
       wrap.appendChild(big);
+
+      var weatherEl = node('div', 'hud-weather');
+      weatherEl.innerHTML = '<i class="wx-icon"></i><span class="wx-label"></span><span class="wx-wet"><b></b></span>';
+      wrap.appendChild(weatherEl);
+
+      var pitEl = node('div', 'hud-pit');
+      wrap.appendChild(pitEl);
 
       var paused = node('div', 'hud-paused', '<b>PAUSED</b><span>Esc to resume</span>');
       wrap.appendChild(paused);
@@ -259,18 +268,77 @@
             radio._t = setTimeout(function () { radio.classList.remove('show'); }, 2600);
           }
 
+          /* flags */
+          var flagText = '';
+          if (d.blueFlag) flagText = 'BLUE FLAG';
+          else if (d.flag === 'sc') flagText = 'SAFETY CAR';
+          else if (d.flag === 'vsc') flagText = 'VIRTUAL SAFETY CAR';
+          else if (d.flag === 'red') flagText = 'RED FLAG';
+          else if (d.flag === 'yellow') flagText = 'YELLOW FLAG';
+          if (flag._txt !== flagText || flag._flag !== d.flag) {
+            flag._txt = flagText;
+            flag._flag = d.flag;
+            flag.textContent = flagText;
+            flag.className = 'hud-flag' + (flagText ? ' show f-' + (d.blueFlag ? 'blue' : d.flag) : '');
+          }
+
+          /* weather */
+          if (d.weather) {
+            weatherEl.querySelector('.wx-icon').textContent = d.weather.icon || '';
+            weatherEl.querySelector('.wx-label').textContent = d.weather.label || '';
+            var wetBar = weatherEl.querySelector('.wx-wet b');
+            wetBar.style.width = Math.round(T.clamp(d.trackWet || 0, 0, 1) * 100) + '%';
+            weatherEl.classList.toggle('wet', (d.trackWet || 0) > 0.2);
+          }
+
+          /* pit lane */
+          if (d.pitting) {
+            pitEl.textContent = d.pitPhase === 'box' ? 'PIT STOP' : 'PIT LANE \u00b7 80';
+            pitEl.className = 'hud-pit show boxed';
+          } else if (d.pitRequested) {
+            pitEl.textContent = 'PIT IN THIS LAP';
+            pitEl.className = 'hud-pit show';
+          } else if (pitEl.className.indexOf('show') >= 0) {
+            pitEl.className = 'hud-pit';
+          }
+
+          /* penalties */
+          if (d.penalty > 0) {
+            penEl.textContent = '+' + d.penalty + 's';
+            penEl.className = 'hud-pen show';
+          } else {
+            penEl.className = 'hud-pen';
+          }
+
           /* tower */
           var rows = d.standings && d.standings.length ? d.standings : [{
             pos: d.position, code: 'YOU', name: 'You', gap: 0, me: true
           }];
-          if (towerBody._key !== rows.length) {
-            towerBody._key = rows.length;
+          /* the rows are rebuilt only when the shape changes, but the numbers
+             are written every frame so the gaps actually count down */
+          var rowEls = towerBody._rows;
+          var structure = rows.map(function (r) { return r.code + (r.me ? '*' : ''); }).join(',');
+          if (towerBody._key !== structure) {
+            towerBody._key = structure;
             towerBody.innerHTML = rows.map(function (r, i) {
               return '<div class="tower-row' + (r.me ? ' me' : '') + '" data-i="' + i + '">' +
-                '<span class="p">' + r.pos + '</span>' +
-                '<span class="n">' + (r.code || '') + '</span>' +
-                '<span class="g mono">' + (r.gap ? '+' + r.gap.toFixed(1) : (i === 0 ? '' : '')) + '</span></div>';
+                '<span class="p"></span><span class="n"></span><span class="g mono"></span></div>';
             }).join('');
+            rowEls = towerBody._rows = Array.prototype.map.call(towerBody.children, function (el) {
+              return { el: el, p: el.children[0], n: el.children[1], g: el.children[2] };
+            });
+          }
+          for (var ri = 0; ri < rows.length && ri < rowEls.length; ri++) {
+            var rr = rows[ri], re = rowEls[ri];
+            if (re.p.textContent !== String(rr.pos)) re.p.textContent = rr.pos;
+            var code = rr.code || '';
+            if (re.n.textContent !== code) re.n.textContent = code;
+            var gapTxt = '';
+            if (rr.gap) {
+              gapTxt = rr.unit === 'L' ? '+' + rr.gap + ' LAP' + (rr.gap > 1 ? 'S' : '')
+                : '+' + rr.gap.toFixed(rr.unit === 's' ? 1 : 0) + (rr.unit || '');
+            }
+            if (re.g.textContent !== gapTxt) re.g.textContent = gapTxt;
           }
 
           /* tyres */

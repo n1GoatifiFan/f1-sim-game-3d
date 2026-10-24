@@ -589,3 +589,110 @@ body[data-camera="cockpit"] .hud-cluster,
 body[data-camera="tcam"] .hud-cluster { bottom: calc(var(--hud-pad) + 10px); }
 body[data-camera="cockpit"] .hud-tyres,
 body[data-camera="tcam"] .hud-tyres { bottom: calc(var(--hud-pad) + 6px); }
+
+/* ------------------------------------------------------------------ */
+/* flags, weather, pit, penalties                                      */
+/* ------------------------------------------------------------------ */
+.hud-flag.show {
+  padding: 5px 14px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: #111;
+  background: #ffd400;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  animation: flagpulse 0.9s ease-in-out infinite alternate;
+}
+.hud-flag.f-sc { background: #ffd400; }
+.hud-flag.f-vsc { background: #f4e07a; }
+.hud-flag.f-red { background: #e10600; color: #fff; }
+.hud-flag.f-yellow { background: #ffd400; }
+@keyframes flagpulse { from { opacity: 0.75; } to { opacity: 1; } }
+
+.hud-weather {
+  position: absolute;
+  top: calc(var(--hud-pad) + 6px);
+  right: calc(var(--hud-pad) + 196px);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 9px;
+  border-radius: 4px;
+  background: rgba(8, 11, 16, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  font-size: 10.5px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: #cfd6de;
+}
+.hud-weather .wx-icon { font-size: 13px; }
+.hud-weather .wx-wet {
+  display: block; width: 34px; height: 3px; border-radius: 2px;
+  background: rgba(255, 255, 255, 0.14); overflow: hidden;
+}
+.hud-weather .wx-wet b { display: block; height: 100%; width: 0; background: #47c7fc; }
+.hud-weather.wet { border-color: rgba(71, 199, 252, 0.55); }
+
+.hud-pit {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--hud-pad) + 168px);
+  transform: translateX(-50%) translateY(8px);
+  padding: 6px 14px;
+  border-radius: 4px;
+  background: rgba(225, 6, 0, 0.88);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  opacity: 0;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.hud-pit.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.hud-pit.boxed { background: #19c37d; color: #06210f; }
+
+.hud-pen {
+  margin-top: 6px;
+  padding: 3px 7px;
+  border-radius: 3px;
+  background: rgba(225, 6, 0, 0.85);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.08em;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.hud-pen.show { opacity: 1; }
+
+/* results table on the finish card */
+.result-table {
+  margin: 14px 0 6px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 5px;
+  overflow: hidden;
+  font-size: 12px;
+}
+.result-table .rt-head,
+.result-table .rt-row {
+  display: grid;
+  grid-template-columns: 42px 1fr 52px 86px;
+  align-items: center;
+  padding: 5px 10px;
+  gap: 6px;
+}
+.result-table .rt-head {
+  background: rgba(255, 255, 255, 0.06);
+  color: #8b959f;
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+}
+.result-table .rt-row:nth-child(odd) { background: rgba(255, 255, 255, 0.025); }
+.result-table .rt-row.me { background: rgba(225, 6, 0, 0.22); color: #fff; }
+.result-table .rt-row .p { font-weight: 800; }
+.result-table .rt-row .n { letter-spacing: 0.08em; font-weight: 600; }
+.result-table .rt-row .l { color: #8b959f; }
+.result-table .rt-row .g { text-align: right; }
+.hud-flag.f-blue { background: #2f7fe0; color: #fff; }

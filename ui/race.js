@@ -62,6 +62,7 @@
           '<span><b>Space</b> ERS deploy</span><span><b>F</b> ERS mode</span>' +
           '<span><b>C</b> camera</span><span><b>X</b> look back</span>' +
           '<span><b>R</b> reset car</span><span><b>H</b> HUD</span>' +
+          '<span><b>P</b> pit request</span><span><b>[ / ]</b> pit tyres</span>' +
           '<span><b>Esc</b> pause</span>' +
           '</div>' +
           '<div class="pause-note muted">Prototype build \u00b7 opponents arrive in the AI milestone</div>' +
@@ -134,7 +135,15 @@
           compound: params.compound || 'medium',
           camera: params.camera || 'tcam',
           startS: params.startS,
-          countdown: params.countdown === undefined ? 3.6 : params.countdown
+          countdown: params.countdown === undefined ? 3.6 : params.countdown,
+          gridSlot: params.gridSlot,
+          difficulty: params.difficulty,
+          weather: params.weather,
+          wetness: params.wetness,
+          ambientC: params.ambientC,
+          field: params.field,
+          seed: params.seed,
+          round: params.round
         });
         F1.app.raceSession = session;
 
@@ -182,6 +191,32 @@
         F1.app.toast('Camera: ' + (F1.cameras.LABELS[m] || m), 1200);
       }
 
+      /* classification: eight rows plus the player, the way a results sheet
+         is printed in the paddock */
+      function resultTable(sess) {
+        var rows = sess.results;
+        if (!rows || !rows.length) return '';
+        var me = null;
+        rows.forEach(function (r) { if (r.me) me = r; });
+        var show = rows.slice(0, 8);
+        if (me && show.indexOf(me) < 0) show.push(me);
+        var scale = sess.bestLap > 0 ? sess.bestLap / sess.track.length : 0;
+        var leadLaps = rows[0].laps;
+        var html = '<div class="result-table"><div class="rt-head"><span>POS</span><span>DRIVER</span>' +
+          '<span>LAPS</span><span>GAP</span></div>';
+        show.forEach(function (r) {
+          var down = leadLaps - r.laps;
+          var gap = r.pos === 1 ? 'LEADER'
+            : down > 0 ? '+' + down + ' LAP' + (down > 1 ? 'S' : '')
+            : '+' + (r.gap * scale).toFixed(1) + 's';
+          html += '<div class="rt-row' + (r.me ? ' me' : '') + '"><span class="p">' + r.pos + '</span>' +
+            '<span class="n">' + esc(r.code || '') + '</span>' +
+            '<span class="l">' + r.laps + '</span>' +
+            '<span class="g mono">' + gap + '</span></div>';
+        });
+        return html + '</div>';
+      }
+
       function showSummary() {
         if (!session) return;
         var panel = document.createElement('div');
@@ -197,6 +232,7 @@
           '<div><span>Best lap</span><b class="mono">' + (best ? U.fmtTime(best) : '\u2014') + '</b></div>' +
           '<div><span>Last lap</span><b class="mono">' + (last ? U.fmtTime(last) : '\u2014') + '</b></div>' +
           '</div>' +
+          resultTable(session) +
           '<div class="pause-actions">' +
           '<button class="btn primary" data-act="again">Race again</button>' +
           '<button class="btn" data-act="quit">Back to menu</button>' +

@@ -63,9 +63,24 @@
 
       var startS = params.startS === undefined ? track.length - 12 : params.startS;
 
+      /* difficulty scales the whole AI field; 'custom' reads the sliders */
+      var DIFF = (F1.field && F1.field.DIFFICULTY) || {};
+      var diffName = params.difficulty || S.gameplay.difficulty || 'balanced';
+      var diffPace = DIFF[diffName] === undefined ? 0.85 : DIFF[diffName];
+      if (diffName === 'custom' && S.gameplay.aiSkill !== undefined) {
+        diffPace = 0.6 + S.gameplay.aiSkill / 100 * 0.6;
+      }
+
+      /* line up in a real grid slot unless this is a solo session */
+      var solo = params.field === false;
+      var gridSlot = params.gridSlot === undefined ? (solo ? 0 : 5) : params.gridSlot;
+      var gridPos = (!solo && F1.field) ? F1.field.slotPos(track, startS, gridSlot)
+        : { s: startS, lateral: 0 };
+
       /* ---------------- the player car ---------------- */
       var car = F1.vehicle.create(track, spec, {
-        startS: startS,
+        startS: gridPos.s,
+        lateral: gridPos.lateral,
         compound: params.compound || 'medium',
         fuel: params.fuel === undefined ? spec.fuelDefault : params.fuel,
         assists: assists,
@@ -78,6 +93,33 @@
       mesh.rotation.y = car.heading + Math.PI;
       world.group.add(mesh);
       var wheels = mesh.userData.wheels || [];
+
+      /* ---------------- the rest of the field ---------------- */
+      var field = (!solo && F1.field) ? F1.field.create(track, world, {
+        playerId: driverId,
+        startS: startS,
+        playerSlot: gridSlot,
+        difficulty: diffPace,
+        pace: params.pace === undefined ? 1 : params.pace,
+        compound: params.compound || 'medium',
+        raceLaps: lapsTotal,
+        ambientC: params.ambientC,
+        wetness: params.wetness || 0,
+        seed: params.seed || (meta.id + '|' + (params.round || 1))
+      }) : null;
+
+      /* ---------------- race control ---------------- */
+      var rc = F1.racecontrol ? F1.racecontrol.create(track, {
+        circuitWeather: meta.weather,
+        seed: meta.id,
+        weather: params.weather || 'auto'
+      }) : null;
+
+      /* ---------------- pit lane ---------------- */
+      var pitLane = F1.pitlane ? F1.pitlane.build(track) : null;
+
+      /* ---------------- rain ---------------- */
+      var rainFx = F1.weatherfx ? F1.weatherfx.create(sceneApi.scene) : null;
 
       /* ---------------- cameras ---------------- */
       var cams = F1.cameras.create(track);
@@ -117,7 +159,18 @@
         ersMode: 'balanced',
         position: 1,
         finishTime: 0,
-        flag: 'green'
+        flag: 'green',
+        pitRequested: false,
+        pitRun: null,
+        pitting: false,
+        stops: 0,
+        pitServed: false,
+        pitCompound: null,
+        offTime: 0,
+        results: null,
+        warnings: 0,
+        blueFlag: false,
+        ambientC: params.ambientC === undefined ? 22 : params.ambientC
       };
 
       var sectorFracs = [
@@ -135,6 +188,14 @@
       var acc = 0;
       var wheelSpinV = 0;
 
+      /* ---------------- race control inputs ---------------- */
+      var rcCars = [{ id: driverId, car: car, isPlayer: true }];
+      if (field) {
+        field.cars.forEach(function (e) { rcCars.push({ id: e.id, car: e.car, isPlayer: false }); });
+      }
+      var rcCtx = { cars: rcCars, state: 'countdown' };
+      var lastSky = '';
+
       /* ---------------- input ---------------- */
       var held = { boost: false, lookBack: false, shiftUp: false, shiftDown: false };
 
@@ -147,6 +208,11 @@
           // the throttle is live on the grid but the car is held: give the
           // player the "revs" feedback of a real start
           inp.throttle = F1.input.getThrottle() * 0.4;
+          car.ersMode = St.ersMode;
+          return inp;
+        }
+        if (rc && rc.flag === 'red' && St.state === 'racing') {
+          inp.brake = 1;
           car.ersMode = St.ersMode;
           return inp;
         }
@@ -229,9 +295,36 @@
         return St.lapTime - ref;
       }
 
+      /* the player's car as a classification row, in the field's own shape */
+      var playerRow = {
+        id: driverId, teamId: teamId, car: car, isPlayer: true,
+        lapStart: 0, lastLap: 0, bestLap: 0, penalty: 0, position: 1,
+        seat: { driver: driver, code: driver.code },
+        get laps() { return Math.max(0, St.lap - 1); },
+        get started() { return !!St.started; }
+      };
+
+      /* final classification: cars still running are ordered by distance
+         covered, which is what a chequered flag looks like in the data */
+      function classify() {
+        if (!field) {
+          return [{ pos: 1, code: driver.code, name: driver.name, laps: playerRow.laps, gap: 0, me: true, teamId: teamId }];
+        }
+        var rows = field.standings(playerRow);
+        return rows.map(function (r, i) {
+          return {
+            pos: i + 1, code: r.code, name: r.name, laps: r.laps,
+            gap: r.gap, me: r.me, teamId: r.teamId,
+            penalty: (rc && rc.penaltyFor(r.id)) || 0
+          };
+        });
+      }
+
       function finish() {
         St.state = 'finished';
         St.finishTime = St.time;
+        St.results = classify();
+        St.position = playerRow.position || St.position;
         say('Chequered flag \u00b7 P' + St.position);
         F1.input.rumble && F1.input.rumble(0.8, 0.5, 400);
         F1.bus.emit('session-finish', {
@@ -247,16 +340,51 @@
 
       /* ---------------- a step of the world ---------------- */
       function physicsStep(inp) {
+        /* in the pit lane the car follows the lane rather than the tyre model:
+           the corridor is narrow, the limit is 80 km/h and the wall is not
+           modelled separately */
+        if (St.pitRun) {
+          St.pitRun.update(STEP);
+          if (St.pitRun.atBox && !St.pitServed) {
+            St.pitServed = true;
+            St.pitRun.serve(St.pitCompound || car.compound, 20);
+            St.stops++;
+            say('Box complete \u2014 ' + (St.pitCompound || car.compound) + ' fitted');
+          }
+          if (St.pitRun.done) {
+            St.pitRun = null;
+            St.pitting = false;
+            F1.input.rumble && F1.input.rumble(0.2, 0.2, 120);
+          }
+          /* the pit lane crosses the start line: the lap still counts */
+          if (St.state === 'racing' && car.s < St.lastCrossS - track.length * 0.5) {
+            onCrossLine();
+          }
+          St.lastCrossS = car.s;
+          return;
+        }
         var env = {
           assists: assists,
-          wetness: params.wetness || 0,
-          ambientC: params.ambientC === undefined ? 22 : params.ambientC,
+          wetness: Math.max(params.wetness || 0, rc ? rc.wetness : 0),
+          ambientC: St.ambientC,
           debug: false
         };
         F1.vehicle.step(car, inp, STEP, track, env);
         car.throttle = inp.throttle;
         car.brake = inp.brake;
         wheelSpinV -= (car.vx / 0.36) * STEP;
+
+        /* pit entry: the request is armed with the pit button, the dive
+           happens when the car reaches the entry window */
+        if (St.pitRequested && pitLane && !St.pitRun && St.state === 'racing' &&
+            pitLane.inWindow(car.s) && Math.abs(car.vx) < 34) {
+          St.pitRequested = false;
+          St.pitRun = F1.pitlane.runner(track, pitLane, car, { stopTime: 2.5 });
+          St.pitServed = false;
+          St.pitting = true;
+          St.pitCompound = St.pitCompound || 'hard';
+          say('Pit lane \u2014 80 km/h');
+        }
 
         if (St.state === 'racing') {
           var lapLen = track.length;
@@ -280,6 +408,21 @@
             }
           }
           St.lastCrossS = nowS;
+
+          /* track limits: a warning after 1.5 s off the road in one go, and
+             a five second penalty every fourth warning */
+          if (car.edge > 1.6) St.offTime += STEP;
+          else St.offTime = Math.max(0, St.offTime - STEP * 2);
+          if (St.offTime > 1.5) {
+            St.offTime = 0;
+            St.warnings++;
+            if (rc && St.warnings % 4 === 0) {
+              rc.addPenalty(driverId, 5, 'Track limits');
+              say('Track limits \u2014 5 second penalty');
+            } else {
+              say('Track limits \u2014 ' + St.warnings + '/4');
+            }
+          }
         } else {
           St.lastCrossS = car.s;
         }
@@ -364,6 +507,21 @@
           tickTiming(STEP);
           St.time += STEP;
           if (St.state === 'racing' && !St.started) St.lapTime = 0;
+
+          /* the world keeps turning at the same rate as the player's car */
+          if (St.state === 'racing') {
+            if (rc) {
+              rcCtx.state = 'racing';
+              rc.update(STEP, rcCtx);
+              St.flag = rc.flag;
+            }
+            if (field) {
+              if (rc) field.setConditions({ wetness: rc.wetness, ambientC: St.ambientC });
+              field.update(STEP);
+              field.setLimit(rc ? rc.limit : 0);
+              field.setFrozen(rc ? rc.flag === 'red' : false);
+            }
+          }
         }
         if (steps === MAX_STEPS) acc = 0;   // drop the backlog after a stall
 
@@ -395,6 +553,16 @@
           w.spin.rotation.x = wheelSpinV;
         }
 
+        if (field) field.render(alpha);
+        if (rainFx) {
+          rainFx.setIntensity(rc ? rc.weather.rainIntensity : 0);
+          rainFx.update(1 / 60, sceneApi.camera);
+        }
+        if (rc && world.setWeather && rc.skyState() !== lastSky) {
+          lastSky = rc.skyState();
+          world.setWeather(lastSky);
+        }
+
         var camCar = {
           x: x - track.origin.x, y: y, z: z - track.origin.z,
           heading: h, vx: car.vx, steer: car.steer,
@@ -407,7 +575,63 @@
       }
 
       /* ---------------- HUD feed ---------------- */
+      var hudRows = [];
+      function updateStandings() {
+        if (!field) return;
+        var rows = field.standings(playerRow);
+        hudRows.length = 0;
+        var leaderGap = 0, leaderTime = 0;
+        for (var i = 0; i < rows.length; i++) {
+          var r = rows[i];
+          if (r.me) {
+            St.position = r.pos;
+            St.gapToLeader = r.gap;
+          }
+          // seconds behind: use the leader's own lap time as the divisor so
+          // the tower reads like a timing screen
+          if (i === 0) leaderTime = r.bestLap || r.lastLap || 0;
+        }
+        var me = null;
+        for (i = 0; i < rows.length; i++) if (rows[i].me) me = rows[i];
+        if (me && me.bestLap) leaderTime = leaderTime || me.bestLap;
+        // before anyone has set a lap time the tower shows metres; after that
+        // it switches to seconds behind the leader, like a timing screen
+        var scale = leaderTime > 0 ? leaderTime / track.length : 0;
+        var unit = scale > 0 ? 's' : 'm';
+        var leaderLaps = rows.length ? rows[0].laps : 0;
+        function gapRow(row, i) {
+          var lapsDown = leaderLaps - row.laps;
+          if (i === 0) return { pos: row.pos, code: row.code, name: row.name, me: row.me, gap: 0, unit: unit };
+          if (lapsDown > 0) {
+            return { pos: row.pos, code: row.code, name: row.name, me: row.me, gap: lapsDown, unit: 'L' };
+          }
+          return {
+            pos: row.pos, code: row.code, name: row.name, me: row.me,
+            gap: scale ? row.gap * scale : row.gap, unit: unit
+          };
+        }
+        for (i = 0; i < rows.length; i++) {
+          if (i < 3 || (me && Math.abs(i - (me.pos - 1)) <= 3)) hudRows.push(gapRow(rows[i], i));
+        }
+        if (me && !hudRows.some(function (r) { return r.me; })) hudRows.push(gapRow(me, me.pos - 1));
+
+        /* blue flags: a car a lap ahead closing on the player has to be let
+           through, and the HUD says so */
+        St.blueFlag = false;
+        if (me) {
+          for (i = 0; i < rows.length; i++) {
+            var other = field.byDriver[rows[i].id];
+            if (!other || other.laps <= playerRow.laps) continue;
+            var ds = other.car.s - car.s;
+            if (ds > track.length * 0.5) ds -= track.length;
+            if (ds < -track.length * 0.5) ds += track.length;
+            if (ds < 0 && ds > -70 && other.car.vx > car.vx) St.blueFlag = true;
+          }
+        }
+      }
+
       function pushHud() {
+        updateStandings();
         var d = {
           trackId: meta.id, trackName: meta.name,
           state: St.state, countdown: St.countdown, paused: St.paused,
@@ -429,8 +653,29 @@
           bestSectors: St.bestSectors,
           s: track.wrapS(car.s), trackLength: track.length,
           message: St.message,
-          standings: [{ pos: 1, code: driver.code || driver.lastName.slice(0, 3).toUpperCase(), name: driver.name, gap: 0, me: true }]
+          flag: St.flag,
+          blueFlag: St.blueFlag,
+          sectorFlags: rc ? rc.sectorFlags : null,
+          scPhase: rc ? rc.scPhase : '',
+          weather: rc ? {
+            label: rc.weatherLabel(), icon: rc.weatherIcon(), wetness: rc.wetness,
+            sky: rc.skyState()
+          } : null,
+          trackWet: rc ? rc.wetness : 0,
+          pitting: St.pitting,
+          pitPhase: St.pitRun ? St.pitRun.phase : '',
+          pitRequested: St.pitRequested,
+          stops: St.stops,
+          penalty: rc ? rc.penaltyFor(driverId) : 0,
+          standings: hudRows.length ? hudRows : [{
+            pos: 1, code: driver.code || driver.lastName.slice(0, 3).toUpperCase(),
+            name: driver.name, gap: 0, me: true
+          }]
         };
+        if (field) {
+          var last = hudRows[hudRows.length - 1];
+          d.totalCars = field.cars.length + 1;
+        }
         F1.bus.emit('hud', d);
       }
 
@@ -459,6 +704,9 @@
         car.lastIdx = track.indexAt(s);
         car.damage.frontWing = Math.min(car.damage.frontWing, 0.4);
         St.lastCrossS = s;
+        St.pitRequested = false;
+        St.pitRun = null;
+        St.pitting = false;
         say('Car reset \u00b7 keep it on the road');
         F1.input.rumble && F1.input.rumble(0.6, 0.3, 200);
       }
@@ -479,6 +727,28 @@
         return held.boost;
       }
 
+      /* ---------------- pit controls ---------------- */
+      function requestPit() {
+        if (St.state !== 'racing') return false;
+        if (St.pitRun) { say('Already in the pit lane'); return false; }
+        St.pitRequested = !St.pitRequested;
+        if (St.pitRequested) {
+          St.pitCompound = St.pitCompound || (car.compound === 'soft' ? 'hard' : 'soft');
+          say('Pit stop requested \u2014 ' + String(St.pitCompound).toUpperCase() + ' ready');
+        } else {
+          say('Pit request cancelled');
+        }
+        return St.pitRequested;
+      }
+
+      function cyclePitCompound() {
+        var order = ['soft', 'medium', 'hard'];
+        var i = order.indexOf(St.pitCompound || car.compound);
+        St.pitCompound = order[(i + 1) % order.length];
+        say('Pit tyres \u2014 ' + St.pitCompound.toUpperCase());
+        return St.pitCompound;
+      }
+
       /* ---------------- keyboard ---------------- */
       function onKey(e) {
         var code = e.code;
@@ -493,10 +763,14 @@
         if (code === 'KeyC') cycleCamera(1);
         if (code === 'KeyR') resetCar();
         if (code === 'KeyF') cycleERS();
+        if (code === 'KeyP') requestPit();
+        if (code === 'BracketLeft' || code === 'BracketRight') cyclePitCompound();
       }
 
       /* ---------------- cleanup ---------------- */
       function dispose() {
+        if (field) { try { field.dispose(); } catch (e) { console.error(e); } field = null; }
+        if (rainFx) { try { rainFx.dispose(); } catch (e) {} rainFx = null; }
         if (mesh.parent) mesh.parent.remove(mesh);
         F1.input.enabled = true;
       }
@@ -509,7 +783,15 @@
         update: update, tick: update,
         setPaused: setPaused, resetCar: resetCar, cycleERS: cycleERS,
         cycleCamera: cycleCamera, toggleDRS: toggleDRS,
+        requestPit: requestPit, cyclePitCompound: cyclePitCompound,
         onKey: onKey, dispose: dispose,
+        field: field, raceControl: rc, pitLane: pitLane,
+        get results() { return St.results; },
+        get flag() { return rc ? rc.flag : 'green'; },
+        get weather() { return rc ? rc.weather : null; },
+        get pitting() { return St.pitting; },
+        get stops() { return St.stops; },
+        classify: classify,
         get paused() { return St.paused; },
         get position() { return St.position; },
         get bestLap() { return St.bestLap; },

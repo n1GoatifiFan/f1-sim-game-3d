@@ -328,10 +328,112 @@ camera and hands the frame to `api.onFrame` (the session).
 
 ---
 
+## Section 4 — 21 opponents, race control, pits, weather
+
+The field is real: every opponent is an `F1.vehicle` with the player's tyre
+model, drag, downforce and barrier contact. The AI (`ai/driver.js`) only ever
+returns pedals and steering, so there is no grip cheating anywhere in the
+field — a slow car is slow because the model says so.
+
+### AI re-base (the important part)
+
+Two compounding measurement errors were found and fixed before the field could
+work:
+
+1. **The aerodynamics were ~50× too strong.** `downX/Z` were 1.95 / 4.60, which
+   gave 4.9 kN of downforce at 150 km/h (a real 2026 car makes ~90 N there at
+   that speed). The speed profile trusted that number and planned corners the
+   tyres could never deliver. Re-based to **2.30 / 5.50** (≈170 N at 150 km/h,
+   ≈3.8 kN at 300 km/h).
+2. **The lateral-g readout was 0.00 everywhere**, so every measurement taken
+   against it was meaningless. It is now tracked, and a synthetic-circle sweep
+   puts the real sustained cornering load at **2.3–2.6 g**.
+
+With honest numbers the profile is built from a measured cap,
+`aLatMax = G·grip + 0.0040·v²`, instead of the full downforce term; tyre grips
+were re-based (soft 2.52 / medium 2.38 / hard 2.20 / inter 2.05 / wet 1.62) and
+the peak slip angle widened from 0.122 to 0.165 rad. The corner-radius guard in
+the profile now floors at 8 m so Monaco's hairpins survive.
+
+**AI soak** (`tools/simcheck.js`, single car): Monza 100.5 s, Silverstone 119.1,
+Spa 134.0, Suzuka 116.8 — repeatable to ±0.1 s with **zero off-track time on 21
+of 24 circuits**. Monaco still needs care (see next steps).
+
+### `game/field.js` (new, 21 cars)
+
+- Grid slots shared with the session (`F1.field.slotPos`) so the player lines up
+  in a real slot (default P6) with cars around them.
+- Per-car AI: skill from the driver's overall, pace from the difficulty
+  setting and the team's performance ratings; one team-mate is not identical to
+  the other.
+- **Traffic model**: each car is told the gap to the car in front and the side
+  with room. It queues at that gap and pulls out to pass; it never drives
+  through anybody. Contact is positional (a shove plus a lift), not a 2D solver.
+- Lap timing, sector-less classification by distance covered (negative before
+  the first crossing, so a grid behind the line is not "a lap ahead").
+- Pit strategy: one scheduled stop over races of 8+ laps, or an emergency stop
+  when the average wear passes 0.72. The car drives the pit lane under the same
+  runner the player uses.
+- `setLimit` (safety car delta), `setFrozen` (red flag) and `setConditions`
+  (wetness / ambient) let race control and the weather act on the whole field.
+
+### `game/racecontrol.js` (new)
+
+Flags **green / yellow / VSC / SC / red**, per-sector yellows, deployment logic
+(three incidents in 20 s → SC; a sector that will not clear → recovery SC;
+standing water → SC), the SC cycle (deploy → neutralised → in this lap → green),
+and a red flag that freezes the field and restarts it behind the car.
+Penalties: 5 s for every fourth track-limits warning and 5 s for exceeding the
+safety-car delta for 2.5 s. Weather is a four-state walk (dry → cloudy → showers
+→ heavy rain) with a wetness value that ramps up faster than it dries, feeds
+`vehicle.step`, the AI target speed and the sky.
+
+### `game/pitlane.js` (new)
+
+The lane is a path offset from the centreline (the same geometry the pit
+building was drawn against), 6.8 % of a lap long, **80 km/h limit**, an entry
+blend from the racing line, a box at 42 %, a 2.2–2.8 s stop, and an exit that
+rejoins after the start line (so a stop does not lose a lap). The car is driven
+kinematically while in the lane; the normal tyre model resumes at the exit.
+`P` requests a stop, `[` / `]` choose the compound.
+
+### `world/weatherfx.js` (new)
+
+2 600 rain streaks in one `THREE.Points` cloud that follows the camera, with
+opacity and fall speed driven by race control's rain intensity. The road's
+roughness/metalness and the sky are switched by the existing
+`world.setWeather()`.
+
+### HUD additions
+
+Flag banner (yellow / SC / VSC / red / blue), weather chip with a track-wetness
+bar, pit request and pit-stop banners, a penalty chip, and a live timing tower:
+**metres** before the first lap time exists, **seconds** after, and **+N LAPS**
+once a car is lapped. The tower used to redraw its rows only when the number of
+rows changed, which froze every gap; it now caches the elements and rewrites
+the numbers each frame.
+
+**Exit test** (headless Chromium, `file://`)
+- 22-car grid at Monza: player P6, 21 opponents on the grid, countdown, launch,
+  P2 by 15 s, lapped traffic, gaps live in the tower.
+- 90 s race with the field running: no page errors, no console errors.
+- Pit stop: `requestPit` → `entry` → `box` → `exit` → fresh softs at 0.00 wear,
+  `stops = 1`.
+- Heavy rain at Spa: wetness 0.82, sky `rain`, 2 600 streaks visible, AI speeds
+  down ~40 %, yellow flag out.
+- Finish: chequered flag card, 22-row classification, penalty chip (+10 s).
+- 10-lap race at Austria in Node: **21 stops**, one safety car (27 s), zero
+  recoveries, zero barrier contacts, no NaNs.
+
+---
+
 ## Next steps (queue)
-1. Section 4: finish the AI (pace + contact avoidance), 21 opponents, race
-   control, pits, weather.
-3. Section 5: weekend formats, replays, classification.
-4. Section 6: career, R&D, market, saves.
-5. Section 7: audio, polish, size audit, README.txt.
-6. Section 8: README/README.txt, final size + `file://` verification.
+1. Section 5: weekend formats (FP1–FP3, Q1–Q3, sprint), formation lap, full
+   classification with retirements, replays and photo mode.
+2. Section 6: career (create driver, contracts, R&D, market, three save slots,
+   JSON export/import).
+3. Section 7: audio, rain-follow-on polish, size audit.
+4. Section 8: README/README.txt, final size + `file://` verification.
+5. Open: Monaco AI still touches the barrier at Rascasse (steering saturates at
+   0.38 while the command is 1.0); field pace is ~20 % off real-world lap times
+   because the tyre model, not the profile, is the limit.
