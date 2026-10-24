@@ -32,10 +32,10 @@
     var ds = track.step;
     var mass = spec.mass + (car.fuel || 0);
 
-    var grip = opts.grip === undefined ? 1.12 : opts.grip;     // mu, lateral
+    var grip = opts.grip === undefined ? 1.75 : opts.grip;     // mu, lateral
     var brakeGrip = opts.brakeGrip === undefined ? grip * 1.02 : opts.brakeGrip;
     var vTop = opts.vTop === undefined ? 96 : opts.vTop;
-    var maxLane = opts.maxLane === undefined ? 2.6 : opts.maxLane;
+    var maxLane = opts.maxLane === undefined ? 1.6 : opts.maxLane;
 
     // 0.5 * rho * Cl / m  (1/m) for the high-downforce aero mode
     var downK = 0.5 * RHO * spec.downZ / mass;
@@ -58,9 +58,13 @@
     for (i = 0; i < n; i++) {
       k = Math.abs(kMid[i]);
       if (k < 1e-5) { v[i] = vTop; continue; }
-      var r = Math.max(18, 1 / k);      // no real F1 corner is tighter than 18 m
-      var den = 1 - r * grip * downK;
-      var vx = den > 0.05 ? Math.sqrt(r * grip * G / den) : 400;
+      var r = Math.max(8, 1 / k);       // guard against survey spikes
+      // Lateral limit as a function of speed. Downforce adds load but the
+      // car's balance (front axle saturates first) caps the usable lateral g,
+      // so the aero term is only worth a partial credit. This curve was
+      // measured with the same vehicle code on synthetic circles.
+      var aLatMax = G * grip + 0.0040 * v[i] * v[i];
+      var vx = Math.sqrt(r * aLatMax);
       v[i] = Math.min(vTop, vx);
     }
 
@@ -107,8 +111,14 @@
       kSmooth[i] = acc / cnt;
     }
 
+    // how far off the centreline a car can sit before the barrier gets close
+    var laneMax = new Float32Array(n);
+    for (i = 0; i < n; i++) {
+      laneMax[i] = Math.max(0, Math.min(maxLane, track.width[i] * 0.5 - 3.2));
+    }
+
     return {
-      v: out, track: track, step: ds, grip: grip, downK: downK, kSmooth: kSmooth,
+      v: out, track: track, step: ds, grip: grip, downK: downK, kSmooth: kSmooth, laneMax: laneMax,
       lapTime: profileLapTime(track, out),
       sampleAt: function (s) {
         var f = track.wrapS(s) / ds;
@@ -120,7 +130,8 @@
       },
       lineAt: function (s) {
         var i = Math.floor(track.wrapS(s) / ds) % n;
-        return F1.ai._clamp(kSmooth[i] * 420, -maxLane, maxLane);
+        var lim = laneMax[i];
+        return F1.ai._clamp(kSmooth[i] * 420, -lim, lim);
       }
     };
   }
@@ -146,6 +157,7 @@
     var stuckT = 0;           // seconds spent trying to move with no result
     var recState = 'run';     // run | reverse | recover
     var recT = 0;             // seconds left in the current recovery phase
+    var recCycles = 0;        // failed recovery attempts in a row
 
     var drv = {
       input: { steer: 0, throttle: 0, brake: 0, boost: false },
@@ -183,8 +195,8 @@
         var eCross = car.lateral - lat;              // + = right of the line
 
         var steerAng = Math.atan(3.4 * kT)                       // geometry
-          + psi * (off ? 0.9 : 0.55)                             // heading error
-          - Math.atan((off ? 2.2 : 0.85) * eCross / (v + 5));    // cross-track
+          + psi * (off ? 0.9 : 0.62)                             // heading error
+          - Math.atan((off ? 2.2 : 1.35) * eCross / (v + 6));    // cross-track
         // yaw damping: stop the car from rocking itself into a spin
         steerAng -= car.r * 0.05;
 
@@ -199,7 +211,27 @@
         var offNow = off;
         if (recState === 'run') {
           if (speedNow < 3.0) stuckT += dt; else stuckT = Math.max(0, stuckT - dt * 0.5);
-          if (stuckT > 0.9) { recState = 'reverse'; recT = 1.8; stuckT = 0; }
+          if (speedNow > 9) recCycles = 0;
+          if (stuckT > 0.9) {
+            stuckT = 0;
+            recState = 'reverse';
+            recT = 1.8;
+            recCycles++;
+            /* Three failed attempts means the car is properly beached.
+               In the real world a marshal recovers it, so the AI gets the
+               same treatment as the player's reset button: back onto the
+               road, pointing the right way, from a standstill. */
+            if (recCycles >= 3) {
+              var atReset = track.at(track.wrapS(car.s), {});
+              car.x = atReset.x; car.z = atReset.z; car.y = atReset.y;
+              car.heading = atReset.heading;
+              car.vx = 0; car.vl = 0; car.r = 0; car.steer = 0;
+              car.gear = 1; car.lastIdx = track.indexAt(track.wrapS(car.s));
+              car.wallContact = 0; car.wheelSpin = 0;
+              recState = 'recover'; recT = 1.2; recCycles = 0;
+              if (opts.onRecover) opts.onRecover(car);
+            }
+          }
         }
         if (recState === 'reverse') {
           recT -= dt;

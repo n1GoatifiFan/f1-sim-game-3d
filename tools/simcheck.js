@@ -70,7 +70,7 @@ console.log(`    profile lap ${prof.lapTime.toFixed(3)} s`);
 
 const STEP = 1 / 120;
 let t = 0, lapT = 0, lastS = 0, lap = 0;
-let top = 0, offT = 0, wallCt = 0, spinT = 0, nan = -1;
+let top = 0, offT = 0, wallCt = 0, spinT = 0, nan = -1, maxLatG = 0;
 const lapTimes = [];
 let started = false;
 
@@ -87,6 +87,7 @@ for (let i = 0; i < 120 * 900; i++) {
   if (!isFinite(car.x) || !isFinite(car.vx)) { nan = t; break; }
 
   const kmh = Math.abs(car.vx) * 3.6;
+  if (Math.abs(car.latG) > maxLatG) maxLatG = Math.abs(car.latG);
   if (kmh > top) top = kmh;
   if (car.surface !== 'asphalt' && car.surface !== 'kerb') offT += STEP;
   if (car.wallContact > 0.5) wallCt++;
@@ -104,5 +105,5 @@ for (let i = 0; i < 120 * 900; i++) {
 }
 
 console.log(`    laps [${lapTimes.map(x => x.toFixed(3)).join(', ')}] in ${t.toFixed(1)} s`);
-console.log(`    top ${top.toFixed(0)} km/h | off-track ${offT.toFixed(1)} s | wall ${wallCt} | slide ${spinT.toFixed(1)} s | nan ${nan > 0 ? nan.toFixed(1) : -1}`);
+console.log(`    top ${top.toFixed(0)} km/h | latG ${maxLatG.toFixed(2)} | off-track ${offT.toFixed(1)} s | wall ${wallCt} | slide ${spinT.toFixed(1)} s | nan ${nan > 0 ? nan.toFixed(1) : -1}`);
 console.log(`    fuel ${car.fuel.toFixed(1)} kg | tyres ${['fl','fr','rl','rr'].map(k => car.tyres[k].tempC.toFixed(0)).join('/')} °C | wear ${['fl','fr','rl','rr'].map(k => car.tyres[k].wear.toFixed(2)).join('/')}`);

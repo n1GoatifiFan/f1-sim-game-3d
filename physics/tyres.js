@@ -21,27 +21,27 @@
   var COMPOUNDS = {
     soft: {
       id: 'soft', code: 'S', name: 'Soft', color: '#e10600',
-      grip: 1.78, wearRate: 1.55, peakTemp: 92, heatGain: 1.18,
+      grip: 2.52, wearRate: 1.55, peakTemp: 92, heatGain: 1.18,
       wetGrip: 0.30, dryOnly: true
     },
     medium: {
       id: 'medium', code: 'M', name: 'Medium', color: '#ffd400',
-      grip: 1.68, wearRate: 1.0, peakTemp: 98, heatGain: 1.0,
+      grip: 2.38, wearRate: 1.0, peakTemp: 98, heatGain: 1.0,
       wetGrip: 0.36, dryOnly: true
     },
     hard: {
       id: 'hard', code: 'H', name: 'Hard', color: '#f2f2f2',
-      grip: 1.58, wearRate: 0.70, peakTemp: 104, heatGain: 0.86,
+      grip: 2.20, wearRate: 0.70, peakTemp: 104, heatGain: 0.86,
       wetGrip: 0.40, dryOnly: true
     },
     inter: {
       id: 'inter', code: 'I', name: 'Intermediate', color: '#19c37d',
-      grip: 1.45, wearRate: 0.95, peakTemp: 80, heatGain: 0.95,
+      grip: 2.05, wearRate: 0.95, peakTemp: 80, heatGain: 0.95,
       wetGrip: 0.74, dryOnly: false
     },
     wet: {
       id: 'wet', code: 'W', name: 'Wet', color: '#2d6fe0',
-      grip: 1.18, wearRate: 0.82, peakTemp: 70, heatGain: 0.9,
+      grip: 1.62, wearRate: 0.82, peakTemp: 70, heatGain: 0.9,
       wetGrip: 0.96, dryOnly: false
     }
   };

@@ -48,13 +48,13 @@
     regenPower: 250000,     // W under braking
     dragX: 0.86,
     dragZ: 1.24,
-    downX: 1.95,
-    downZ: 4.60,
-    aeroFront: 0.44,
+    downX: 2.30,
+    downZ: 5.50,
+    aeroFront: 0.40,
     brakeMax: 34000,        // N with both feet on the pedal (clipped by grip)
     brakeBias: 0.57,
     steerLock: 0.40,        // rad at standstill
-    peakAngle: 0.122,       // rad
+    peakAngle: 0.165,       // rad
     peakRatio: 0.085,
     fuelDefault: 28,        // kg
     fuelBurn: 0.0275,       // kg/s at full throttle
