@@ -192,6 +192,6 @@
       "exit": 0.03,
       "offset": 8
     },
-    "accuracy": "ACCURATE"
+    "accuracy": "APPROX"
   };
 })(window.F1 = window.F1 || {});

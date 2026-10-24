@@ -593,9 +593,62 @@ results card offers *Back to championship*.
 
 ---
 
+## Section 8 — docs, polish and the final run
+
+### Documentation
+`README.md` and `README.txt` rewritten as the player-facing manual: how to run it
+from `file://`, the full keyboard and gamepad maps, every mode, the weekend
+format, the points tables, all settings, the folder structure with the load
+order, the **size-budget table** and the **circuit accuracy list** (per round:
+length, ACCURATE/APPROXIMATE, notes). Both carry the credits section — Three.js
+(r158 UMD, MIT) and the TUMFTM racetrack-database (LGPL-3.0, the derived
+centreline files inherit it) — and the known limitations.
+
+### Accuracy tags corrected
+The accuracy audit found four hand-traced circuits still labelled ACCURATE in
+their generated files (Azerbaijan, Monaco, Qatar, Singapore) and seven traced
+circuits missing the `approximate: true` metadata flag, so the game would have
+shown them as surveyed. Both are fixed: **16 ACCURATE / 8 APPROXIMATE**, and the
+browser check confirms the flag reaches the UI (time trial header, grid badges).
+
+### Polish pass
+- Every screen was measured at **1280×720**: no horizontal or vertical overflow
+  on garage, grid, quick race, settings, time trial, championship or career.
+- The main menu footer was colliding with entry 06 at 720p and the garage list
+  hid its eleventh team behind a scrollbar; both now fit (menu/footer gap 88 px,
+  all 11 teams visible) via a `max-height: 780px` block, not a redesign.
+- Stale build labels removed ("Section 1 build", "Driving arrives in Section 3",
+  "opponents arrive in the AI milestone"): the menu footer now reads
+  `v1.0 · 2026 season` and the pause card explains Esc / M / F3 instead.
+- The mute chip is drawn twice on purpose: `body.audio-muted::after` in menus and
+  `.hud-mute` inside a session (the body chip is suppressed under
+  `#screen-root.race-active` with `:has()`).
+
+### Final run (headless Chromium, `file:///…/index.html`, no server)
+- Boot: main menu, 11 teams, 22 drivers, 24 circuits (22 active), 6 menu items,
+  0 page errors, 0 console errors.
+- All eight screens mount from a real `file://` navigation and paint content.
+- Quick race: 21 AI cars, 5 788 m Monza geometry, audio graph live after a real
+  pointer gesture (master 0.72), engineer radio visible in the HUD
+  ("Yellow flag ahead. Be ready to slow.").
+- Pause opens and closes, `M` mutes and unmutes, exiting to the menu removes the
+  race layer cleanly.
+- Regression: 21-car grid · pit stop soft→medium with wear reset to 0 · all five
+  flags (yellow, VSC + limit, SC + limit, red, green) · replay (95 s ring) +
+  photo mode · 22-car classification · results card · paddock with 7 sessions ·
+  formation lap → countdown → racing.
+- Models: career (11 offers, P4 → 12 pts, R&D aero → level 1), championship
+  (P2 → 18 pts, leader NOR), time trial (PB stored, slower lap rejected).
+
+### Size
+**75 files, 1.54 MB of file content (1.7 MB on disk), 120 KB of `.git`.**
+Target 40 MB, hard limit 128 MB — 3.9 % of the target. Largest file
+`lib/three.min.js` at 637 KB; no circuit file reaches 20 KB.
+
+---
+
 ## Next steps (queue)
-1. Section 8: README.md/README.txt (controls, structure, size budget table,
-   circuit accuracy list), final size and `file://` no-console-error run.
-3. Open: Monaco AI still touches the barrier at Rascasse (steering saturates at
-   0.38 while the command is 1.0); field pace is ~20 % off real-world lap times
-   because the tyre model, not the profile, is the limit.
+1. Done: Sections 1–8 are complete and pushed. The build is the deliverable.
+2. Optional polish if work continues: Monaco Rascasse steering saturation, and
+   closing the ~20 % gap to real lap times by retuning the tyre model rather
+   than the AI profile. Both are recorded in README's known limitations.

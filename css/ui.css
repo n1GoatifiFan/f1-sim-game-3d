@@ -701,3 +701,22 @@ body.audio-muted:has(#screen-root.race-active)::after { display: none; }
 .tt-stats div { display: flex; flex-direction: column; gap: 1px; }
 .tt-stats span { font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
 .tt-stats b { font-family: var(--cond); font-style: italic; font-size: 17px; }
+
+/* 720p (and any short window): keep the six menu entries clear of the footer */
+@media (max-height: 780px) and (min-width: 900px) {
+  .menu-title { font-size: clamp(40px, 5.4vw, 66px); }
+  .menu-subtitle { margin-bottom: 18px; }
+  .menu-list { gap: 6px; }
+  .btn-menu { padding: 9px 16px 9px 14px; }
+  .btn-menu .lbl { font-size: 20px; }
+  .btn-menu .sub { font-size: 10px; }
+  .menu-footer { font-size: 10px; }
+}
+
+/* garage at 720p: eleven teams fit without scrolling */
+@media (max-height: 780px) and (min-width: 900px) {
+  .team-list { gap: 3px; }
+  .team-item { padding: 5px 10px; }
+  .team-item .sw { height: 24px; }
+  .garage-layout { gap: 12px; }
+}

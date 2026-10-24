@@ -163,6 +163,6 @@
       "exit": 0.05,
       "offset": 10
     },
-    "accuracy": "ACCURATE"
+    "accuracy": "APPROX"
   };
 })(window.F1 = window.F1 || {});
