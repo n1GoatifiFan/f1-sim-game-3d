@@ -316,8 +316,85 @@
         renderGrid();
       });
 
-      var grid = U.node('div', 'circuit-grid scroll');
-      wrap.appendChild(grid);
+      /* ---------------- your seat: team + driver ---------------- */
+      /* Quick races are not tied to the career contract: the player picks any
+         car on the 2026 grid before choosing a circuit. */
+      var seat = {
+        teamId: F1.settings.gameplay.seatTeam || 'mclaren',
+        driverId: F1.settings.gameplay.seatDriver || 'norris'
+      };
+      if (!D.getTeam(seat.teamId)) seat.teamId = 'mclaren';
+      var teamDrivers = D.getTeam(seat.teamId).drivers;
+      if (teamDrivers.indexOf(seat.driverId) < 0) seat.driverId = teamDrivers[0];
+
+      var seatPanel = U.node('div', 'seat-panel');
+      wrap.appendChild(seatPanel);
+
+      function renderSeat() {
+        var team = D.getTeam(seat.teamId);
+        var driver = D.getDriver(seat.driverId);
+        seatPanel.innerHTML = '';
+
+        var head = U.node('div', 'seat-head');
+        head.innerHTML =
+          '<span class="seat-kicker">Your car</span>' +
+          '<span class="seat-now" style="--seat:' + team.colors.primary + '">' +
+            '<b>' + esc(team.short) + '</b> \u00b7 ' + esc(driver.name) +
+            '<span class="seat-num">#' + driver.number + '</span>' +
+          '</span>';
+        seatPanel.appendChild(head);
+
+        var teams = U.node('div', 'seat-teams');
+        D.teams.forEach(function (t) {
+          var on = t.id === seat.teamId;
+          var b = U.node('button', 'seat-team' + (on ? ' on' : ''));
+          b.style.setProperty('--seat', t.colors.primary);
+          b.innerHTML = '<span class="swatch"></span><span>' + esc(t.short) + '</span>';
+          b.title = t.name;
+          b.addEventListener('click', function () {
+            seat.teamId = t.id;
+            seat.driverId = t.drivers[0];
+            saveSeat();
+            renderSeat();
+          });
+          teams.appendChild(b);
+        });
+        seatPanel.appendChild(teams);
+
+        var drivers = U.node('div', 'seat-drivers');
+        D.getTeam(seat.teamId).drivers.forEach(function (id) {
+          var d = D.getDriver(id);
+          var on = id === seat.driverId;
+          var b = U.node('button', 'seat-driver' + (on ? ' on' : ''));
+          b.style.setProperty('--seat', team.colors.primary);
+          b.innerHTML =
+            '<span class="dn">' + esc(d.short || d.name.split(' ').slice(-1)[0]) + '</span>' +
+            '<span class="dnum">#' + d.number + '</span>' +
+            '<span class="dov">' + D.driverOverall(d) + '</span>';
+          b.addEventListener('click', function () {
+            seat.driverId = id;
+            saveSeat();
+            renderSeat();
+          });
+          drivers.appendChild(b);
+        });
+        seatPanel.appendChild(drivers);
+      }
+
+      function saveSeat() {
+        F1.settings.gameplay.seatTeam = seat.teamId;
+        F1.settings.gameplay.seatDriver = seat.driverId;
+        F1.settings.save();
+      }
+
+      renderSeat();
+
+      /* the grid scrolls inside a wrapper: a grid that is itself the flex
+         child gets a definite height and its auto rows collapse */
+      var gridWrap = U.node('div', 'circuit-grid-wrap scroll');
+      var grid = U.node('div', 'circuit-grid');
+      gridWrap.appendChild(grid);
+      wrap.appendChild(gridWrap);
 
       var footer = U.node('div', 'panel pad');
       footer.style.display = 'flex';
@@ -375,13 +452,20 @@
             circuitId: meta.id,
             type: meta.sprint ? 'sprint' : 'standard',
             seed: 'wkd|' + meta.id,
-            teamId: F1.settings.career.teamId || 'mclaren',
-            driverId: F1.DATA.teamOf(F1.settings.career.teamId || 'mclaren').drivers[0],
+            teamId: seat.teamId,
+            driverId: seat.driverId,
             raceLength: F1.settings.gameplay.raceLength
           });
         });
         footer.querySelector('#start-race').addEventListener('click', function () {
-          if (F1.app.startQuickRace) F1.app.startQuickRace({ circuit: meta.id, raceLength: F1.settings.gameplay.raceLength });
+          if (F1.app.startQuickRace) {
+            F1.app.startQuickRace({
+              circuit: meta.id,
+              raceLength: F1.settings.gameplay.raceLength,
+              teamId: seat.teamId,
+              driverId: seat.driverId
+            });
+          }
         });
       }
 

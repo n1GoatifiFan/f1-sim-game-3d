@@ -70,7 +70,9 @@
       penalties: true,
       flashbacks: 0,                 // number of rewinds allowed
       includeCancelled: false,       // include Bahrain + Jeddah in the calendar
-      ghost: true
+      ghost: true,
+      seatTeam: 'mclaren',           // quick-race seat, independent of career
+      seatDriver: 'norris'
     },
     assists: {
       tractionControl: 2,            // 0 off .. 3 full

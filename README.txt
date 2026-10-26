@@ -8,7 +8,7 @@ geometry plus canvas-painted liveries, circuits are built from real centrelines,
 and all audio is synthesised with the Web Audio API. No image, model or sound
 files are included.
 
-Folder: 75 files, 1.7 MB on disk / 1.54 MB of file content
+Folder: 75 files, 1.8 MB on disk / 1.57 MB of file content
          (budget: 40 MB target, 128 MB hard limit).
 Saves:   localStorage under the f1_2026_ prefix, with JSON export/import.
 
@@ -24,7 +24,9 @@ MODES
 -----
 Career        Create a driver or take a real seat; contracts, credits, R&D,
               driver market, three save slots, JSON export/import.
-Quick Race    One circuit, one grid, any car, from 3 laps up.
+Quick Race    Pick any of the 22 seats on the grid (team, then driver), then
+              any circuit. The seat is remembered and is separate from your
+              career contract. From 3 laps up.
 Time Trial    Three solo laps per circuit, personal bests per circuit, and a
               translucent ghost of your best lap in that car.
 Championship  Any driver, any subset of the 22 rounds, sprint points on/off,
@@ -104,7 +106,7 @@ ai/                                             16 KB
 tools/ (dev only)                               56 KB
 root files (index.html, main.js, docs)          60 KB
 ------------------------------------------------------
-TOTAL (75 files, excluding .git)             1.7 MB on disk
+TOTAL (75 files, excluding .git)             1.8 MB on disk
 
 Largest single file: lib/three.min.js, 637 KB.
 Every circuit file is under 20 KB.

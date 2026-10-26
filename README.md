@@ -22,7 +22,7 @@ the folder.
 modules, no `fetch`, no XHR, no CDN. Saves live in `localStorage` (with an
 in-memory fallback if the browser blocks it).
 
-**Size:** 1.7 MB on disk (1.54 MB of file content), 75 files — well inside the 40 MB budget.
+**Size:** 1.8 MB on disk (1.57 MB of file content), 75 files — well inside the 40 MB budget.
 
 ---
 
@@ -71,7 +71,10 @@ move) and saves a PNG of the current frame next to your downloads.
   credits, invest in five R&D departments (which really change the car's
   performance), survive the driver market, and chase a contract objective over
   seasons. Three save slots plus JSON export/import.
-- **Quick Race** — one circuit, one grid, any car, from 3 laps up.
+- **Quick Race** — pick **any of the 22 seats** on the 2026 grid (team strip →
+  team-mate strip), then any circuit, then go. The seat is remembered between
+  sessions and is independent of your career contract, so a quick race never
+  moves your career driver. From 3 laps up.
 - **Time Trial** — three solo laps per circuit, personal bests per circuit, and
   a translucent **ghost** of your best lap in that car. The ghost is the pose
   trace the session records; it is saved the moment a lap is banked.
@@ -140,16 +143,16 @@ world → physics → ai → game → ui → `core/app.js` → `main.js`.
 |---|---|
 | `lib/` (Three.js r158 UMD) | 640 KB |
 | `data/` (24 circuits + teams/drivers/sponsors) | 284 KB |
-| `world/` | 156 KB |
+| `world/` | 180 KB |
 | `game/` | 148 KB |
-| `ui/` | 144 KB |
+| `ui/` | 148 KB |
 | `physics/` | 76 KB |
-| `css/` | 68 KB |
+| `css/` | 72 KB |
 | `core/` | 68 KB |
 | `ai/` | 16 KB |
 | `tools/` (dev only) | 56 KB |
 | root files (`index.html`, `main.js`, docs) | 60 KB |
-| **Total (75 files, no `.git`)** | **1.7 MB on disk** (1.54 MB of content) |
+| **Total (75 files, no `.git`)** | **1.8 MB on disk** (1.57 MB of content) |
 
 Budget: **40 MB target, 128 MB hard limit** — used 4.3 % of the target.
 Largest single file: `lib/three.min.js` at 637 KB. Every circuit file is under
@@ -224,8 +227,11 @@ stylised shapes and text, not trademarks.
   occasionally draws a barrier touch (steering saturates before the command).
 - Field pace is roughly 20 % off real qualifying times: the tyre model, not the
   AI profile, is the limit.
-- Cars are procedural low-poly models — an artistic choice to stay offline and
-  small, not a placeholder.
+- Cars are procedural rather than downloaded: no third-party model with a usable
+  licence exists for the 2026 regulations, and a real one would blow the size
+  budget. The model is a lofted body (about 20 k triangles at full detail,
+  780 at the far-LOD) with carbon/paint material splits, a lathe-turned tyre
+  with a polar-mapped Pirelli sidewall, and canvas-painted wheel faces.
 - Hand-traced (APPROXIMATE) circuits have correct length and corner order but
   simplified radii.
 

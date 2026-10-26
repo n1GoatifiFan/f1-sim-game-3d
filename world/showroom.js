@@ -14,16 +14,21 @@
     var c = document.createElement('canvas');
     c.width = 512; c.height = 256;
     var ctx = c.getContext('2d');
+    /* a bright cyclorama: light ceiling, grey horizon, dark floor. Car paint is
+       mostly a mirror, so without a bright environment the bodywork reads as a
+       black slab no matter how many lights you add. */
     var g = ctx.createLinearGradient(0, 0, 0, 256);
-    g.addColorStop(0, '#0a0d13');
-    g.addColorStop(0.45, '#1a1f27');
-    g.addColorStop(0.55, '#2a3038');
-    g.addColorStop(1, '#07090c');
+    g.addColorStop(0.00, '#eef3f8');
+    g.addColorStop(0.22, '#c8d3de');
+    g.addColorStop(0.44, '#9aa8b6');
+    g.addColorStop(0.52, '#6d7a87');
+    g.addColorStop(0.70, '#333c46');
+    g.addColorStop(1.00, '#0d1116');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, 512, 256);
 
-    // soft studio strip lights
-    function strip(x, y, w, h, col, blur) {
+    // soft studio strip lights, the vertical highlights on the flanks
+    function strip(x, y, w, h, col) {
       var lg = ctx.createLinearGradient(0, y, 0, y + h);
       lg.addColorStop(0, 'rgba(255,255,255,0)');
       lg.addColorStop(0.5, col);
@@ -31,10 +36,12 @@
       ctx.fillStyle = lg;
       ctx.fillRect(x, y, w, h);
     }
-    strip(20, 40, 150, 22, 'rgba(255,255,255,0.95)');
-    strip(330, 30, 130, 18, 'rgba(210,230,255,0.8)');
-    strip(90, 70, 60, 60, 'rgba(255,255,255,0.25)');
-    strip(390, 150, 90, 90, 'rgba(255,190,120,0.18)');
+    strip(10, 30, 220, 34, 'rgba(255,255,255,1.0)');
+    strip(300, 24, 210, 30, 'rgba(232,244,255,0.95)');
+    strip(110, 84, 120, 70, 'rgba(255,255,255,0.40)');
+    strip(360, 78, 130, 76, 'rgba(214,234,255,0.34)');
+    strip(0, 150, 512, 30, 'rgba(150,176,200,0.22)');
+    strip(420, 196, 90, 40, 'rgba(255,190,120,0.16)');
 
     ENV_TEX = new THREE.CanvasTexture(c);
     ENV_TEX.mapping = THREE.EquirectangularReflectionMapping;
@@ -89,7 +96,7 @@
       scene.background = new THREE.Color(0x05070a);
       scene.fog = new THREE.FogExp2(0x05070a, 0.028);
       scene.environment = studioEnv();
-      scene.environmentIntensity = 0.9;
+      scene.environmentIntensity = 1.15;
 
       var camera = new THREE.PerspectiveCamera(38, 1, 0.1, 120);
       function fitAspect(w, h) {
@@ -136,12 +143,12 @@
       var label = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 1.15),
         new THREE.MeshBasicMaterial({ map: makeTextPlane('McLaren', 'Lando Norris \u00b7 1', '#ffffff'), transparent: true, opacity: 0.5, depthWrite: false }));
       label.rotation.x = -Math.PI / 2;
-      label.position.set(-0.2, 0.02, -4.4);
+      label.position.set(0.3, 0.02, -4.6);
       label.rotation.z = Math.PI;
       scene.add(label);
 
       /* ---------------- lights ---------------- */
-      scene.add(new THREE.HemisphereLight(0xb4c8de, 0x0c0f13, 0.55));
+      scene.add(new THREE.HemisphereLight(0xc4d6ea, 0x141a20, 1.05));
 
       // key light sits on the camera side of the car (viewer sees lit bodywork)
       var key = new THREE.SpotLight(0xffffff, 620, 45, 0.72, 0.65, 1.4);
@@ -154,10 +161,15 @@
       key.shadow.camera.far = 34;
       scene.add(key, key.target);
 
-      var fill = new THREE.DirectionalLight(0xc8d8ec, 0.55);
-      fill.position.set(5, 4.5, 4);
+      /* a matched pair of fills on both flanks: the car is never lit from one
+         side only, which is what made the bodywork read as a flat slab */
+      var fill = new THREE.DirectionalLight(0xc8d8ec, 1.15);
+      fill.position.set(6, 4.5, 4.5);
       scene.add(fill);
-      var frontFill = new THREE.DirectionalLight(0xfff6ea, 0.3);
+      var fillL = new THREE.DirectionalLight(0xdfe9f5, 0.9);
+      fillL.position.set(-6.5, 3.0, 3.0);
+      scene.add(fillL);
+      var frontFill = new THREE.DirectionalLight(0xfff6ea, 0.6);
       frontFill.position.set(-2, 2.2, 9);
       scene.add(frontFill);
 
@@ -206,10 +218,10 @@
 
       /* ---------------- framing + interaction ---------------- */
       var view = {
-        yaw: -0.72, pitch: 0.24, dist: 8.6,
-        targetYaw: -0.72, targetPitch: 0.24, targetDist: 8.6,
+        yaw: -0.72, pitch: 0.20, dist: 9.8,
+        targetYaw: -0.72, targetPitch: 0.20, targetDist: 9.8,
         target: new THREE.Vector3(0, 0.55, 0),
-        menuOffset: new THREE.Vector3(-1.55, 0.15, 0),
+        menuOffset: new THREE.Vector3(-1.75, 0.15, 0),
         mode: 'menu'
       };
       var spin = 0, idle = 0, dragging = false, lastX = 0, lastY = 0, autoSpin = true;
@@ -217,12 +229,14 @@
       function setMode(mode) {
         view.mode = mode;
         if (mode === 'menu') {
-          view.targetYaw = -0.72; view.targetPitch = 0.22; view.targetDist = 9.2;
-          view.target.set(-1.35, 0.5, 0);
+          view.targetYaw = -0.72; view.targetPitch = 0.18; view.targetDist = 10.0;
+          view.target.set(-1.40, 0.46, 0);
           autoSpin = true;
         } else {
-          view.targetYaw = -0.85; view.targetPitch = 0.26; view.targetDist = 8.4;
-          view.target.set(0, 0.5, 0);
+          /* the garage view leaves the left third of the screen free for the
+             team list, so the car sits right of centre and further back */
+          view.targetYaw = -0.74; view.targetPitch = 0.20; view.targetDist = 10.2;
+          view.target.set(0.62, 0.46, 0);
           autoSpin = false;
           idle = 4;
         }

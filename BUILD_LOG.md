@@ -647,8 +647,97 @@ Target 40 MB, hard limit 128 MB — 3.9 % of the target. Largest file
 
 ---
 
+## Section 9 — car model rework + quick-race seat picker
+
+Two follow-up requests: *the 3D models look bad — make them realistic*, and
+*let the player pick a driver in quick races*.
+
+### The car model, rewritten (`world/car_model.js`, 58 KB)
+The old car was a handful of overlapping flat loft panels: a bright painted
+slab with decals floating outside the bodywork and a front-wing stack visibly
+detached from the nose. It was replaced wholesale rather than patched.
+
+- **Hull**: one continuous loft from nose (z = −2.62) to rear crash structure
+  (z = +2.18), driven by a 23-station table of explicit cross-section points
+  (floor edge, undercut, sidepod shoulder, deck, engine-cover crown) instead of
+  ellipses. Section heights follow a real car: 0.30 m nose, 0.60 m cockpit
+  deck, 0.99 m airbox, 1.02 m rear wing. The belly rises at both ends so the
+  nose floats and the tub sits on the floor.
+- **Two-tone material split**: `loftHull()` sorts faces by height into two
+  material groups — carbon below the split, team paint above. That single
+  change is what makes the bodywork read as a car rather than a painted blob;
+  the plane view shows the carbon floor edge running under the painted pods.
+- **Separate sidepods** with `x`-offset support added to the ring builder.
+  (The first attempt silently ignored the offset, drawing both pods on the
+  centreline and flattening the whole car — found with a material-debug render,
+  not by eye.)
+- **Wings** are closed cambered solids (`wingElement`) with taper and sweep,
+  not single-sided ribbons; the rear wing is painted with a team-coloured flap
+  and carries the endplate decals.
+- **Wheel faces** are painted once into a 256 px canvas per team accent — five
+  forged spokes, a machined lip, a centre nut — instead of five modelled box
+  spokes. Cheaper, and it reads at race distance.
+- **Deleted** the dead `cockpitStations()` stub and the old `mergeStatic`
+  multi-material path (merging rebuilds geometry without groups, which silently
+  turned whole cars carbon-black).
+- Budget: 20 482 triangles / 64 meshes at LOD 2, 16 902 / 48 at LOD 1 (AI),
+  780 / 13 at LOD 0 (distant and ghost). Bounding box 5.24 × 2.04 × 1.09 m.
+
+### Studio lighting (`world/showroom.js`)
+Car paint is mostly a mirror, so the old near-black environment made every
+car look like a dark slab no matter how many lights were added. The equirect
+environment was rebuilt as a bright cyclorama with two big softboxes, a
+horizon band and a warm kicker; `environmentIntensity` is 1.15, and a second
+fill was added on the left flank so bodywork is never lit from one side only.
+Garage framing was pulled back (dist 10.2) so the car is fully in frame and
+clear of the team list and the driver card.
+
+### Quick-race seat picker (`ui/ui.js`, `css/ui.css`, `core/settings.js`)
+- A **Your car** panel sits between the race-length toolbar and the circuit
+  grid: an eleven-team strip, then the two drivers in that team with their
+  numbers and overall ratings. Selection is saved to
+  `settings.gameplay.seatTeam` / `seatDriver` (a new settings key, separate
+  from `career.teamId` — a quick race never moves your career driver).
+- Both launch buttons use it: *Quick race* passes `teamId`/`driverId` into
+  `F1.app.startQuickRace`, and *Full weekend* hands the same seat to the
+  weekend flow.
+- Verified end to end: Ferrari → Hamilton selected → saved → race starts with
+  21 AI cars, no duplicate entry for the player, HAM highlighted at P6 in the
+  tower.
+
+### Layout bug found while doing it
+The circuit grid cards collapsed to 30 px rows whenever the seat panel was
+present. The cause was not the card CSS: a CSS grid that is itself a
+`flex: 1` child gets a definite height, and Blink then treats `auto` rows as
+equal shares of it. Fixed by moving the scroll to a
+`.circuit-grid-wrap` and giving the grid `grid-auto-rows: max-content` —
+132 px cards at every window size (1280×720, 1024×640, 1600×900), all scrolling
+inside the wrap.
+
+### Verification
+- `node --check` clean across every shipped `.js`.
+- Garage + race screenshots re-shot; menu, garage, grid, quick race, settings
+  and career all repaint from `file://` with **0 page errors, 0 console
+  errors**.
+- Full regression re-run after the changes: 8 screens mount (52/118/374/134/
+  158/156/208/211 nodes) · race 21 cars, 175 km/h, five camera modes, pause
+  toggles · formation → countdown → racing · pit stop soft→medium with wear
+  reset to 0 · all five flags (yellow, VSC, SC, red, green) · replay starts and
+  photo mode activates · 22-car classification with the player row present ·
+  time trial 101.067 s best lap · career signs a rookie (Haas, round 1/22,
+  900 credits, 2-year deal) · localStorage round-trips.
+- All 22 driver/team combinations build a valid car with four wheels and a
+  working `setAeroMode` / `setBrakeGlow`.
+
+### Size
+**75 files, 1.57 MB of file content (1.8 MB on disk).** `world/` grew from
+156 KB to 180 KB; everything else is within a few KB. 4.3 % of the 40 MB
+target.
+
+---
+
 ## Next steps (queue)
-1. Done: Sections 1–8 are complete and pushed. The build is the deliverable.
+1. Done: Sections 1–9 are complete and pushed. The build is the deliverable.
 2. Optional polish if work continues: Monaco Rascasse steering saturation, and
    closing the ~20 % gap to real lap times by retuning the tyre model rather
    than the AI profile. Both are recorded in README's known limitations.

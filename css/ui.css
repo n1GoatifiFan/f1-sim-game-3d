@@ -111,7 +111,7 @@ button { font-family: inherit; color: inherit; }
 .screen-career::before,
 .screen-championship::before,
 .screen-time-trial::before {
-  background: linear-gradient(180deg, rgba(3,5,8,0.95), rgba(3,5,8,0.88) 40%, rgba(3,5,8,0.97));
+  background: linear-gradient(180deg, rgba(3,5,8,0.985), rgba(3,5,8,0.955) 40%, rgba(3,5,8,0.99));
 }
 .screen-inner { position: relative; height: 100%; display: flex; flex-direction: column; padding: 28px 38px 22px; }
 .screen.centered .screen-inner { align-items: center; justify-content: center; }
@@ -289,9 +289,10 @@ input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; background: v
 /* ------------------------------------------------------------------ */
 /* circuit cards                                                        */
 /* ------------------------------------------------------------------ */
-.circuit-grid { flex: 1; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(238px, 1fr)); gap: 10px; align-content: start; padding: 2px 2px 24px; }
+.circuit-grid-wrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 4px; }
+.circuit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); grid-auto-rows: max-content; gap: 9px; align-content: start; padding: 2px 2px 18px; }
 .circuit-card {
-  position: relative; cursor: pointer; text-align: left; padding: 14px 16px;
+  position: relative; cursor: pointer; text-align: left; padding: 11px 14px;
   background: linear-gradient(150deg, rgba(22,28,37,0.9), rgba(11,15,21,0.9));
   border: 1px solid var(--line); overflow: hidden;
   transition: border-color 0.15s, transform 0.15s;
@@ -301,7 +302,7 @@ input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; background: v
 .circuit-card .rd { font-family: var(--cond); font-style: italic; font-weight: 800; font-size: 11px; color: var(--dim); letter-spacing: 0.2em; }
 .circuit-card .nm { font-family: var(--cond); font-style: italic; font-weight: 800; font-size: 20px; text-transform: uppercase; margin: 3px 0 1px; }
 .circuit-card .loc { font-size: 10.5px; color: var(--muted); letter-spacing: 0.06em; }
-.circuit-card .meta { display: flex; gap: 12px; margin-top: 12px; font-size: 10.5px; color: var(--dim); }
+.circuit-card .meta { display: flex; gap: 11px; margin-top: 9px; font-size: 10.5px; color: var(--dim); }
 .circuit-card .meta b { color: var(--text); font-weight: 600; }
 .circuit-card .flagline { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; }
 .chip { display: inline-block; padding: 2px 6px; font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; border: 1px solid var(--line-strong); color: var(--muted); margin-left: 6px; }
@@ -309,6 +310,52 @@ input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; background: v
 .chip.cancelled { border-color: rgba(225,6,0,0.5); color: var(--red-soft); }
 .chip.approx { border-color: rgba(255,212,0,0.4); color: var(--yellow); }
 .chip.next { border-color: rgba(255,255,255,0.25); color: var(--muted); }
+
+/* ---- quick-race seat picker ---------------------------------------- */
+.seat-panel {
+  display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto;
+  padding: 9px 13px 10px; margin-bottom: 12px;
+  background: linear-gradient(180deg, rgba(22,26,33,0.92), rgba(14,17,22,0.92));
+  border: 1px solid var(--line); border-left: 3px solid var(--red);
+  pointer-events: auto;
+}
+.seat-head { display: flex; align-items: baseline; gap: 14px; }
+.seat-kicker {
+  font-family: var(--cond); font-style: italic; font-weight: 800;
+  font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--dim);
+}
+.seat-now { font-size: 12.5px; color: var(--muted); }
+.seat-now b { color: var(--seat, #fff); font-family: var(--cond); font-style: italic; font-size: 15px; letter-spacing: 0.02em; }
+.seat-num { margin-left: 8px; color: var(--dim); font-size: 11px; }
+.seat-teams { display: flex; gap: 4px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 1px; }
+.seat-teams::-webkit-scrollbar { display: none; }
+.seat-team { flex: 0 0 auto; }
+.seat-team {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 6px; font-size: 9.5px; letter-spacing: 0.04em; letter-spacing: 0.06em; text-transform: uppercase;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--line);
+  color: var(--muted); cursor: pointer; pointer-events: auto;
+  font-family: var(--cond); font-style: italic; font-weight: 700;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.seat-team:hover { background: rgba(255,255,255,0.07); color: var(--text); }
+.seat-team .swatch { width: 3px; align-self: stretch; min-height: 12px; background: var(--seat); }
+.seat-team.on { color: #fff; border-color: var(--seat); background: color-mix(in srgb, var(--seat) 22%, rgba(255,255,255,0.03)); }
+.seat-drivers { display: flex; gap: 6px; margin-top: 1px; }
+.seat-driver {
+  position: relative; min-width: 128px; text-align: left;
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 6px 10px; cursor: pointer; pointer-events: auto;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--line);
+  color: var(--muted); transition: background .12s, color .12s, border-color .12s;
+}
+.seat-driver:hover { background: rgba(255,255,255,0.07); color: var(--text); }
+.seat-driver .dn { font-family: var(--cond); font-style: italic; font-weight: 800; font-size: 16px; text-transform: uppercase; }
+.seat-driver .dnum { font-size: 10px; color: var(--dim); }
+.seat-driver .dov { margin-left: auto; font-size: 10.5px; color: var(--dim); }
+.seat-driver.on { color: #fff; border-color: var(--seat); background: rgba(255,255,255,0.07); }
+.seat-driver.on::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--seat); }
+.seat-driver.on .dn { color: var(--seat); }
 
 .toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
 .toolbar .spacer { flex: 1; }
