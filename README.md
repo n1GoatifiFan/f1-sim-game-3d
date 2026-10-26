@@ -22,7 +22,13 @@ the folder.
 modules, no `fetch`, no XHR, no CDN. Saves live in `localStorage` (with an
 in-memory fallback if the browser blocks it).
 
-**Size:** 1.8 MB on disk (1.57 MB of file content), 75 files — well inside the 40 MB budget.
+**Size:** ~2.3 MB on disk, 82 files. All textures are generated in-page at load
+(no image files), so the download stays small while the GPU budget grows.
+
+**Art overhaul:** the circuit renderer was rebuilt for broadcast-quality visuals —
+see [`debug/OVERHAUL.md`](debug/OVERHAUL.md) for the pipeline, the per-circuit
+surface system and the measured before/after shots in `debug/before` and
+`debug/after`.
 
 ---
 

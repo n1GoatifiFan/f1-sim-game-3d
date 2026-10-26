@@ -22,12 +22,12 @@
       var scene = new THREE.Scene();
       var world = F1.world.build(track, meta, opts);
       scene.add(world.group);
-      // fog only needs to soften the far distance: keep it well beyond the
-      // circuit so wide shots (orbit / flyover) stay readable
-      var fogCol = new THREE.Color(world.sky.material.uniforms.bottom.value).lerp(new THREE.Color(0xffffff), 0.15);
+      // exp2 fog matched to the atmosphere so the far terrain dissolves into
+      // the sky colour instead of a grey band
+      var fogCol = world.fogColor ? world.fogColor.clone() : new THREE.Color(0xc8d8e6);
       var drawDist = F1.renderer.camera.far || 2600;
-      var fogDefault = null;   // keeps the day fog so camera modes can restore it
-      scene.fog = new THREE.Fog(fogCol, drawDist * 0.45, drawDist * 0.97);
+      var fogDefault = null;   // keeps the base fog so camera modes can restore it
+      scene.fog = new THREE.FogExp2(fogCol.getHex(), 1 / (drawDist * 0.42));
       fogDefault = scene.fog;
       // let world.setWeather('wet'|'overcast') recolour the scene fog
       if (world.setFogHook) {
@@ -35,22 +35,41 @@
       }
       function applyFog() {
         if (!scene.fog) return;
-        if (mode === 'orbit') {
-          // keep the whole circuit crisp, only fade the far terrain
-          scene.fog.near = orbit.dist * 1.25;
-          scene.fog.far = orbit.dist * 3.2;
+        if (mode === 'orbit' || mode === 'shots') {
+          // aerial/cinematic views: the whole circuit must read, only the far
+          // terrain fades. A fixed density would fog out the entire lap.
+          var span = Math.max(track.bounds.maxX - track.bounds.minX,
+                              track.bounds.maxZ - track.bounds.minZ);
+          scene.fog.density = 1 / (Math.max(1600, span * 9));
         } else {
-          scene.fog.near = drawDist * 0.45;
-          scene.fog.far = drawDist * 0.97;
+          scene.fog.density = 1 / (drawDist * 0.42);
         }
       }
 
       var camera = new THREE.PerspectiveCamera(F1.settings.graphics.fov, 1, 0.3, 6000);
 
-      /* sky-coloured environment map: gives PBR materials ambient light */
+      /* PMREM environment generated from the sky dome: ambient + reflections */
       scene.environment = world.envMap;
-      scene.environmentIntensity = 0.85;
+      scene.environmentIntensity = 0.62;
       scene.background = null;
+
+      /* the per-circuit filmic grade + exposure, applied by the post chain */
+      if (F1.post && F1.post.setGrade) {
+        var g = world.grade || {};
+        /* exposure is a camera property: it has to happen before the tone
+           curve, so it goes on the renderer, not in the display-referred grade */
+        if (F1.renderer && F1.renderer.renderer) {
+          F1.renderer.renderer.toneMappingExposure = world.exposure || 1;
+        }
+        F1.post.setGrade({
+          exposure: 1,
+          contrast: g.contrast, saturation: g.saturation, lift: g.lift,
+          gain: g.gain, tintU: g.tintU,
+          vignette: mode === 'race' ? 0.34 : 0.24,
+          grain: 0.014
+        });
+        F1.post.setBloom(0.3, 0.55, 0.92);
+      }
 
       /* ---------------- cameras ---------------- */
       var span = Math.max(track.bounds.maxX - track.bounds.minX, track.bounds.maxZ - track.bounds.minZ);
@@ -63,6 +82,7 @@
       // main grandstand (side +1), which is the shot people recognise
       var trackside = { s: track.length * 0.94, side: -1 };
       var mode = opts.mode || 'flyover';
+      applyFog();   /* the initial mode needs its fog too, not just camera changes */
 
       function setCameraMode(m) {
         mode = m;
@@ -111,10 +131,12 @@
         if (mode === 'race') {
           // a race session drives the camera and the world clock itself
           world.update(dt);
+          if (world.atmo && world.atmo.follow) world.atmo.follow(camera.position);
           if (api && api.onFrame) api.onFrame(dt);
           return;
         }
         world.update(dt);
+        if (world.atmo && world.atmo.follow) world.atmo.follow(camera.position);
         world.setShadowFocus && world.setShadowFocus(camera.position.x, camera.position.z);
         if (mode === 'flyover') {
           fly.s = (fly.s + fly.speed * dt) % track.length;

@@ -47,6 +47,7 @@
     R.renderer.toneMappingExposure = 1.0;
     R.renderer.shadowMap.enabled = !!R.quality.shadows;
     R.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    R.renderer.shadowMap.autoUpdate = true;
     R.renderer.info.autoReset = false;
 
     R.camera = new THREE.PerspectiveCamera(F1.settings.graphics.fov, 1, 0.08, Math.max(2600, R.quality.drawDistance * 2));
@@ -58,11 +59,48 @@
       if (document.hidden) R._lowTime = 0;
     });
 
+    /* screen-space chain: needs the addon bundle, and postFX in the preset */
+    R.buildPost();
     console.log('[renderer] WebGL2=' + R.renderer.capabilities.isWebGL2 +
       ' maxTex=' + R.renderer.capabilities.maxTextureSize +
       ' preset=' + (R.quality.label || 'custom') +
       ' dpr=' + R.pixelRatio.toFixed(2));
     return R.renderer;
+  };
+
+  /* ------------------------------------------------------------------ */
+  /* post chain                                                          */
+  /* ------------------------------------------------------------------ */
+  R.buildPost = function () {
+    if (!F1.post || !F1.post.available()) { R.post = null; return null; }
+    if (!R.quality.postFX) {
+      if (F1.post.composer) F1.post.dispose();
+      R.post = null;
+      return null;
+    }
+    var scene = R._lastScene || (F1.app && F1.app.sceneApi && F1.app.sceneApi.scene);
+    var cam = R._postCam || (F1.app && F1.app.sceneApi && F1.app.sceneApi.camera) || R.camera;
+    if (!scene) return null;
+    var ok = F1.post.create(R.renderer, scene, cam, R.quality);
+    R.post = ok ? F1.post : null;
+    if (ok) {
+      var dpr = R.pixelRatio || 1;
+      F1.post.resize(R.width, R.height, dpr);
+    }
+    return R.post;
+  };
+
+  /* the composer holds a scene reference from build time; every scene swap
+     (menu -> race -> menu) has to repoint it or the last frame is replayed */
+  R.syncPost = function (scene, camera) {
+    var P = F1.post;
+    if (!P || !P.enabled) return;
+    if (P.renderPass && P.renderPass.scene !== scene) {
+      P.renderPass.scene = scene;
+      P.renderPass.camera = camera;
+      if (P.ssao) { P.ssao.scene = scene; P.ssao.camera = camera; }
+      if (P.renderPass.clear) P.renderPass.clear = true;
+    }
   };
 
   R.applySizing = function () {
@@ -75,6 +113,7 @@
     R.renderer.setSize(w, h, false);
     R.camera.aspect = w / h;
     R.camera.updateProjectionMatrix();
+    if (F1.post && F1.post.composer) F1.post.resize(w, h, dpr);
     R.listeners.forEach(function (fn) { try { fn(w, h); } catch (e) { console.error(e); } });
   };
 
@@ -91,12 +130,14 @@
       R.camera.updateProjectionMatrix();
     }
     R.applySizing();
+    R.buildPost();
     F1.bus.emit('quality', name);
   };
 
   /* Called once per rendered frame; cheap rolling average + auto fallback */
   R.tick = function (dt) {
     R.frame++;
+    R.lastDt = dt;
     R._fpsAcc += dt; R._fpsFrames++;
     if (R._fpsAcc >= 0.5) {
       R.fps = R._fpsFrames / R._fpsAcc;
@@ -120,8 +161,24 @@
 
   R.render = function (scene, camera) {
     if (!R.renderer) return;
+    camera = camera || R.camera;
+    R._lastScene = scene;
+    /* a scene/camera swap invalidates the composer's cached references */
+    if (R._postScene !== scene || R._postCam !== camera) {
+      R._postScene = scene; R._postCam = camera;
+      R.syncPost(scene, camera);
+    }
+    /* the composer can only be built once a scene exists — the first frames
+       after boot render the menu showroom, long before the first circuit */
+    if (!R.post && R.quality.postFX && F1.post && F1.post.available()) {
+      R.buildPost();
+      R.syncPost(scene, camera);
+    }
     R.renderer.info.reset();
-    R.renderer.render(scene, camera || R.camera);
+    if (R.post && F1.post.enabled) {
+      if (F1.post.render(R.lastDt || 0.016)) return;
+    }
+    R.renderer.render(scene, camera);
   };
 
   R.info = function () {

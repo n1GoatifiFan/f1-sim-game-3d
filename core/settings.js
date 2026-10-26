@@ -8,24 +8,32 @@
 
   var QUALITY = {
     low: {
-      label: 'Low', pixelRatio: 1.0, shadows: false, shadowSize: 1024,
-      drawDistance: 900, crowdDensity: 0.25, particleMul: 0.4, anisotropy: 1,
-      msaa: 0, asphaltDetail: 0, carDetail: 0, postFX: false, skidMarks: 220, maxLights: 2
+      label: 'Low', qualityRank: 0, pixelRatio: 1.0, shadows: false, shadowSize: 1024,
+      shadowHalf: 90, drawDistance: 900, crowdDensity: 0.25, particleMul: 0.4, anisotropy: 4,
+      msaa: 0, asphaltDetail: 0, carDetail: 0, postFX: false, skidMarks: 220, maxLights: 2,
+      bloomStrength: 0.22, bloomRadius: 0.4, bloomThreshold: 1.0, ssao: false,
+      grassDensity: 0.0, cloudDetail: 0, wetReflections: false
     },
     medium: {
-      label: 'Medium', pixelRatio: 1.25, shadows: true, shadowSize: 1024,
-      drawDistance: 1200, crowdDensity: 0.5, particleMul: 0.7, anisotropy: 2,
-      msaa: 0, asphaltDetail: 1, carDetail: 1, postFX: false, skidMarks: 450, maxLights: 4
+      label: 'Medium', qualityRank: 1, pixelRatio: 1.25, shadows: true, shadowSize: 2048,
+      shadowHalf: 110, drawDistance: 1200, crowdDensity: 0.5, particleMul: 0.7, anisotropy: 8,
+      msaa: 0, asphaltDetail: 1, carDetail: 1, postFX: true, skidMarks: 450, maxLights: 4,
+      bloomStrength: 0.26, bloomRadius: 0.48, bloomThreshold: 0.96, ssao: false,
+      grassDensity: 0.35, cloudDetail: 1, wetReflections: false
     },
     high: {
-      label: 'High', pixelRatio: 1.5, shadows: true, shadowSize: 2048,
-      drawDistance: 1600, crowdDensity: 0.8, particleMul: 1, anisotropy: 4,
-      msaa: 4, asphaltDetail: 2, carDetail: 2, postFX: true, skidMarks: 800, maxLights: 6
+      label: 'High', qualityRank: 2, pixelRatio: 1.5, shadows: true, shadowSize: 2048,
+      shadowHalf: 130, drawDistance: 1600, crowdDensity: 0.8, particleMul: 1, anisotropy: 16,
+      msaa: 0, asphaltDetail: 2, carDetail: 2, postFX: true, skidMarks: 800, maxLights: 6,
+      bloomStrength: 0.32, bloomRadius: 0.55, bloomThreshold: 0.92, ssao: true,
+      grassDensity: 0.65, cloudDetail: 2, wetReflections: true
     },
     ultra: {
-      label: 'Ultra', pixelRatio: 2.0, shadows: true, shadowSize: 4096,
-      drawDistance: 2200, crowdDensity: 1, particleMul: 1.3, anisotropy: 8,
-      msaa: 4, asphaltDetail: 2, carDetail: 2, postFX: true, skidMarks: 1200, maxLights: 8
+      label: 'Ultra', qualityRank: 3, pixelRatio: 2.0, shadows: true, shadowSize: 4096,
+      shadowHalf: 170, drawDistance: 2200, crowdDensity: 1, particleMul: 1.3, anisotropy: 16,
+      msaa: 0, asphaltDetail: 2, carDetail: 2, postFX: true, skidMarks: 1200, maxLights: 8,
+      bloomStrength: 0.38, bloomRadius: 0.62, bloomThreshold: 0.88, ssao: true,
+      grassDensity: 1.0, cloudDetail: 2, wetReflections: true
     }
   };
 

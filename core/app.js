@@ -260,6 +260,7 @@
           App.hideBoot();
           App.show(App.savedScreen() || 'main-menu');
           App.start();
+          F1.bus.emit('app-ready');
         }, 260);
         return;
       }

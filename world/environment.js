@@ -134,13 +134,18 @@
     },
     concrete: function () {
       return tex('concrete', function (ctx, w, h, rnd) {
-        ctx.fillStyle = '#565a5f';
+        ctx.fillStyle = '#b7bcc2';
         ctx.fillRect(0, 0, w, h);
-        for (var i = 0; i < 900; i++) {
-          ctx.fillStyle = 'rgba(255,255,255,' + (rnd() * 0.06) + ')';
+        for (var i = 0; i < 1400; i++) {
+          ctx.fillStyle = 'rgba(255,255,255,' + (rnd() * 0.09) + ')';
           ctx.fillRect(rnd() * w, rnd() * h, 2 + rnd() * 6, 2 + rnd() * 6);
         }
-        ctx.strokeStyle = 'rgba(30,32,35,0.5)';
+        /* grime and rain streaks: what a 30-year-old Monza wall looks like */
+        for (var g2 = 0; g2 < 90; g2++) {
+          ctx.fillStyle = 'rgba(70,68,62,' + (0.03 + rnd() * 0.07) + ')';
+          ctx.fillRect(rnd() * w, rnd() * h, 2 + rnd() * 14, 8 + rnd() * 60);
+        }
+        ctx.strokeStyle = 'rgba(96,100,104,0.55)';
         ctx.lineWidth = 2;
         for (var x = 0; x < w; x += 64) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
         for (var y = 0; y < h; y += 64) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
@@ -480,74 +485,77 @@
     var animated = [];
     var fogHook = null;   // track_scene registers its THREE.Fog here
     var weather = 'dry';
+    var setSurfaceWet = null;   // installed by the surface module
     var features = meta.features || [];
 
-    /* ---------------- lighting + sky ---------------- */
-    var skyPreset = SKY_PRESETS[meta.timeOfDay] || SKY_PRESETS.day;
-    var sky = makeSky(skyPreset);
-    sky.renderOrder = -1000;      // always behind everything else
-    sky.material.depthTest = false;
-    group.add(sky);
+    /* ---------------- lighting + atmosphere ---------------- */
+    /* The sky is a real Preetham dome with a cloud layer, and the environment
+       map is generated from that dome by PMREM — so reflections, ambient and
+       the visible sky always agree. Quality decides shadow budget. */
+    var q = opts.quality || (F1.settings && F1.settings.preset ? F1.settings.preset() : {});
+    var atmo = F1.sky.create(meta, { quality: q });
+    group.add(atmo.group);
+    var sky = atmo.sky;
+    var envMap = atmo.envMap;
+    var ambient = atmo.hemi;
+    var sun = atmo.sun;
+    var sunDir = atmo.sunDir.clone().multiplyScalar(700);
 
-    var ambientLevel = skyPreset.ambient * 3.0;
-    if (meta.timeOfDay === 'night') ambientLevel = Math.max(ambientLevel, 0.5);
-    if (meta.timeOfDay === 'twilight') ambientLevel = Math.max(ambientLevel, 1.6);
-    var ambient = new THREE.HemisphereLight(
-      new THREE.Color(skyPreset.bottom), new THREE.Color(theme.ground), ambientLevel);
-    ambient.position.set(0, 300, 0);
-    group.add(ambient);
-
-    // daylight in the physically-correct units of r155+: a sun is ~3 lux,
-    // an overcast sky ~1.3. Anything below ~1 renders black asphalt.
-    var sunElev = meta.timeOfDay === 'golden' ? 0.34 : meta.timeOfDay === 'twilight' ? 0.12 : 0.95;
-    var sun = new THREE.DirectionalLight(0xfff3e0, skyPreset.sun * 3.4);
-    sun.position.set(420, 620 * sunElev, 260);
-    if (meta.timeOfDay === 'golden') sun.color.setHex(0xffd3a0);
-    if (meta.timeOfDay === 'night') sun.color.setHex(0x8fa6d8);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    // A shadow map spanning the whole circuit is ~1 m per texel and makes
-    // every flat surface self-shadow (black tarmac). Keep the frustum tight
-    // and move it with the action instead (setShadowFocus).
-    var SHADOW_HALF = 150;
+    var SHADOW_HALF = q.shadowHalf || 130;
+    var shadowSize = q.shadowSize || 2048;
+    sun.shadow.mapSize.set(shadowSize, shadowSize);
     sun.shadow.camera.left = -SHADOW_HALF; sun.shadow.camera.right = SHADOW_HALF;
     sun.shadow.camera.top = SHADOW_HALF; sun.shadow.camera.bottom = -SHADOW_HALF;
-    sun.shadow.camera.near = 1; sun.shadow.camera.far = 1500;
-    sun.shadow.bias = -0.0006;
-    sun.shadow.normalBias = 0.06;
+    sun.shadow.camera.near = 1; sun.shadow.camera.far = 1400;
+    sun.shadow.bias = -0.0004;
+    sun.shadow.normalBias = 0.055;
     sun.shadow.camera.updateProjectionMatrix();
     sun.target.position.set(0, 0, 0);
-    sun.position.set(420, 589, 260);
-    group.add(sun, sun.target);
-    var sunDir = sun.position.clone().normalize().multiplyScalar(700);
+    sun.position.copy(sunDir).multiplyScalar(0.8);
+    group.add(sun.target);
+    sun.updateMatrixWorld();
+
+    /* Texel snapping: move the shadow frustum in whole texel steps so the
+       shadow edges do not crawl as the camera follows the car. */
+    var shadowTexel = (SHADOW_HALF * 2) / shadowSize;
     function setShadowFocus(x, z) {
-      sun.target.position.set(x, 0, z);
-      sun.position.set(x + sunDir.x, sunDir.y, z + sunDir.z);
+      var sx = Math.round(x / shadowTexel) * shadowTexel;
+      var sz = Math.round(z / shadowTexel) * shadowTexel;
+      sun.target.position.set(sx, 0, sz);
+      sun.position.set(sx + sunDir.x * 0.8, sunDir.y * 0.8, sz + sunDir.z * 0.8);
       sun.target.updateMatrixWorld();
     }
 
     var isNight = meta.timeOfDay === 'night' || meta.timeOfDay === 'twilight';
     var floodlights = [];
-    if (isNight) {
+    if (meta.timeOfDay === 'night') {
       // Floodlights: point lights spaced along the lap, hung over the track
       // edge. Physically-correct units in r155+ mean candela values in the
       // thousands are needed to read as "lit" from 30 m up.
-      var nFlood = Math.min(14, Math.max(6, Math.round(model.length / 340)));
+      var maxLights = q.maxLights || 8;
+      var nFlood = Math.min(maxLights, Math.max(4, Math.round(model.length / 340)));
       for (var fi = 0; fi < nFlood; fi++) {
         var sF = (fi / nFlood) * model.length;
         var pF = atW(sF, {});
         var side = fi % 2 ? 1 : -1;
         var latF = side * (model.width[Math.round(sF / model.step) % model.count] * 0.5 + 16);
-        var fl = new THREE.PointLight(0xfff2d8, 4200, 300, 1.7);
+        var fl = new THREE.PointLight(0xfff2d8, 5200, 340, 1.65);
         fl.position.set(pF.x + Math.cos(pF.heading) * latF, pF.y + 30,
                         pF.z - Math.sin(pF.heading) * latF);
         group.add(fl);
         floodlights.push(fl);
       }
-      // a soft cool "moon" so nothing is pitch black away from the lamps
-      var moon = new THREE.DirectionalLight(0x9fb6e0, 0.85);
-      moon.position.set(-300, 500, 220);
-      group.add(moon);
+    }
+
+    /* ---------------- track surface ---------------- */
+    /* The dedicated surface module owns asphalt, paint, kerbs and run-off.
+       It is built from the same centreline as the physics, so lines and kerbs
+       cannot drift away from where the car is allowed to drive. */
+    var surface = null;
+    if (F1.surface && opts.surface !== false) {
+      surface = F1.surface.build(model, meta, { quality: q, theme: theme, atW: atW });
+      group.add(surface.group);
+      setSurfaceWet = surface.setWetness;
     }
 
     /* ---------------- ground ---------------- */
@@ -558,7 +566,7 @@
     groundTex.wrapS = groundTex.wrapT = THREE.RepeatWrapping;
     groundTex.repeat.set(groundSize / 26, groundSize / 26);
     var groundMat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(isDesert ? '#c9b98f' : F1.util.mixHex(theme.ground, '#ffffff', 0.55)),
+      color: new THREE.Color(isDesert ? '#c9b98f' : F1.util.mixHex(theme.ground, '#9fae86', 0.35)),
       map: groundTex, roughness: 0.98, metalness: 0
     });
     // ground box: the visible top face plus a thick skirt so low camera
@@ -569,6 +577,7 @@
     ground.receiveShadow = false;      // too large for reliable shadow reception
     group.add(ground);
 
+    if (!surface) {
     /* ---------------- run-off (grass/gravel/sand apron) ---------------- */
     // street circuits have concrete/asphalt verges between the track and the
     // walls; park/desert circuits get grass or sand
@@ -665,6 +674,8 @@
       group.add(kerb);
     });
 
+    }
+
     /* ---------------- barriers or street walls ---------------- */
     var wallTex = Textures.concrete();
     var barrierMat = new THREE.MeshStandardMaterial({
@@ -673,7 +684,7 @@
     var wallMesh = new THREE.Mesh(wallRibbon(model, function (k) {
       return model.width[k] * 0.5 + 2.2;
     }, 0.95, { step: 2 }), barrierMat);
-    wallMesh.castShadow = true; wallMesh.receiveShadow = true;
+    wallMesh.castShadow = true; wallMesh.receiveShadow = false;
     group.add(wallMesh);
     var wallMeshL = new THREE.Mesh(wallRibbon(model, function (k) {
       return -(model.width[k] * 0.5 + 2.2);
@@ -1875,6 +1886,7 @@
     /* ---------------- animated bits ---------------- */
     var startLightsOn = 0;
     function update(dt) {
+      if (atmo) atmo.update(dt);
       var t = performance.now() * 0.001;
       // start lights idle blink when not in a race
       if (!opts.raceActive) {
@@ -1905,9 +1917,15 @@
     return {
       group: group,
       sky: sky,
-      envMap: makeEnvMap(skyPreset),
+      atmo: atmo,
+      envMap: envMap,
       sun: sun,
       ambient: ambient,
+      fogColor: atmo.fogColor,
+      fogNearK: atmo.fogNearK,
+      fogFarK: atmo.fogFarK,
+      exposure: atmo.exposure,
+      grade: atmo.grade,
       floodlights: floodlights,
       update: update,
       setShadowFocus: setShadowFocus,
@@ -1918,22 +1936,16 @@
         weather = state;
         var wet = state === 'wet';
         var overcast = state === 'overcast' || wet;
-        var base = SKY_PRESETS[meta.timeOfDay] || SKY_PRESETS.day;
-        roadMat.roughness = wet ? 0.22 : 0.85;
-        roadMat.metalness = wet ? 0.4 : 0.02;
-        ambient.intensity = base.ambient * (meta.timeOfDay === 'night' ? 0.5 : 3.0) * (overcast ? 1.1 : 1);
-        sun.intensity = base.sun * (meta.timeOfDay === 'night' ? 0.85 : 3.4) * (overcast ? 0.3 : 1);
-        var top = wet ? 0x4a5560 : (overcast ? 0xb7c1c9 : null);
-        var bottom = wet ? 0x7c8792 : (overcast ? 0xcfd8de : null);
-        if (top !== null) {
-          sky.material.uniforms.top.value.setHex(top);
-          sky.material.uniforms.bottom.value.setHex(bottom);
-          if (fogHook) fogHook(new THREE.Color(bottom));
-        } else {
-          sky.material.uniforms.top.value.set(skyPreset.top);
-          sky.material.uniforms.bottom.value.set(skyPreset.bottom);
-          if (fogHook) fogHook(new THREE.Color(skyPreset.bottom));
+        var base = atmo.preset;
+        if (atmo.setWeather) atmo.setWeather(overcast ? 'overcast' : 'dry');
+        if (F1.post && F1.post.setGrade) {
+          F1.post.setGrade({
+            exposure: base.exposure * (overcast ? 1.12 : 1),
+            saturation: (base.grade.saturation || 1.05) * (overcast ? 0.9 : 1)
+          });
         }
+        if (fogHook) fogHook(atmo.fogColor.clone().lerp(new THREE.Color(0x8b96a0), overcast ? 0.55 : 0));
+        if (setSurfaceWet) setSurfaceWet(wet ? 1 : overcast ? 0.45 : 0);
       },
       dispose: function () {
         group.traverse(function (o) {

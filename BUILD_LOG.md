@@ -741,3 +741,29 @@ target.
 2. Optional polish if work continues: Monaco Rascasse steering saturation, and
    closing the ~20 % gap to real lap times by retuning the tyre model rather
    than the AI profile. Both are recorded in README's known limitations.
+
+---
+
+## Section 10 — circuit art overhaul (in progress)
+
+Full detail lives in `debug/OVERHAUL.md`; the problem list that drives it is
+`debug/DIAGNOSIS.md`; before/after shots are in `debug/before` and `debug/after`.
+
+* **10.1 Diagnosis** — done. 13 concrete problems found from four fixed camera
+  angles across all 24 circuits (see the diagnosis file). A standard shot rig
+  (`world/shots.js` + `verify/shots.js`) was built first so every later change
+  can be compared like for like.
+* **10.2 Global pipeline** — done. Offline-bundled three.js post addons
+  (`lib/three-post.js`), composer chain (SSAO → bloom → ACES output → grade →
+  SMAA), analytical HDR sky with clouds/stars/sun disc, PMREM environment
+  generated from that sky, exp2 fog, texel-snapped shadows, four quality presets
+  that actually drive the art budget. Several long-standing rendering bugs were
+  fixed on the way (black concrete texture, self-shadowing walls, black PMREM,
+  fog on aerial cameras, premultiplied-alpha lap map -> black asphalt).
+* **10.3 Track surface, Monza** — done. New `world/surface.js`: swept asphalt
+  with a real crown, aggregate albedo/normal/roughness, a per-lap macro map with
+  a curvature-derived rubber line and marbles, three kerb profiles (flat, raised,
+  sawtooth) with correct stripe spacing, painted start line and grid boxes,
+  mown verges, gravel traps, and a wetness API wired to `world.setWeather`.
+* **10.4 Trackside environment, Monza** — next. Barriers, grandstands, pit
+  complex, gantries, vegetation, and `data/environments/italy.js`.
