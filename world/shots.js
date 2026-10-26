@@ -63,11 +63,13 @@
          back up the road — the classic low-angle speed shot */
       var tsS = track.length * 0.10;
       var ps = track.at(tsS, {});
-      var lat2 = ps.width * 0.5 + 13;
+      /* stand behind the barrier but high enough to see over it: a 1 m
+         concrete wall blocks a 1.55 m camera completely */
+      var lat2 = ps.width * 0.5 + 11;
       camera.fov = 40;
       camera.position.set(
         ps.x - o.x + Math.cos(ps.heading) * lat2,
-        ps.y + 1.55,
+        ps.y + 3.2,
         ps.z - o.z - Math.sin(ps.heading) * lat2);
       var back = track.at(tsS - 70, {});
       camera.lookAt(back.x - o.x, back.y + 1.4, back.z - o.z);
