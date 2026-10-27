@@ -399,71 +399,10 @@
   /* ================================================================== */
   /* sky + lighting                                                     */
   /* ================================================================== */
-  var SKY_PRESETS = {
-    day:      { top: '#7fb2e5', bottom: '#dbe8f2', sun: 1.0, ambient: 0.55, fog: '#c8d8e6', exposure: 1.0 },
-    golden:   { top: '#5a8bc4', bottom: '#ffcf9a', sun: 0.95, ambient: 0.5, fog: '#e8c49a', exposure: 1.05 },
-    twilight: { top: '#243b6b', bottom: '#c96f4a', sun: 0.55, ambient: 0.35, fog: '#5b4a5a', exposure: 1.1 },
-    night:    { top: '#03040a', bottom: '#0d1526', sun: 0.06, ambient: 0.16, fog: '#0a0f18', exposure: 1.2 }
-  };
-
-  /* equirectangular canvas used as scene.environment: gives every PBR
-     material ambient reflections + light from the sky without any HDR file */
-  function makeEnvMap(preset) {
-    var key = 'env_' + preset.top + preset.bottom;
-    if (TEXCACHE[key]) return TEXCACHE[key];
-    var c = cv(512, 256), ctx = c.getContext('2d');
-    var grad = ctx.createLinearGradient(0, 0, 0, 128);
-    grad.addColorStop(0, preset.top);
-    grad.addColorStop(1, preset.bottom);
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 512, 128);
-    var g2 = ctx.createLinearGradient(0, 128, 0, 256);
-    g2.addColorStop(0, preset.bottom);
-    g2.addColorStop(1, '#191d16');
-    ctx.fillStyle = g2;
-    ctx.fillRect(0, 128, 512, 128);
-    // sun disc + glow where the light comes from (u = 0.25)
-    var sx = 128, sy = 96;
-    var glow = ctx.createRadialGradient(sx, sy, 2, sx, sy, 70);
-    glow.addColorStop(0, 'rgba(255,255,245,1)');
-    glow.addColorStop(0.15, 'rgba(255,246,220,0.85)');
-    glow.addColorStop(1, 'rgba(255,240,210,0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.arc(sx, sy, 70, 0, TAU); ctx.fill();
-    var t = new THREE.CanvasTexture(c);
-    t.mapping = THREE.EquirectangularReflectionMapping;
-    t.colorSpace = THREE.SRGBColorSpace;
-    TEXCACHE[key] = t;
-    return t;
-  }
-
-  function makeSky(preset) {
-    // radius must stay well inside the camera far plane (2.6-3.2 km) or the
-    // dome is clipped and the scene renders against the clear colour
-    var geo = new THREE.SphereGeometry(1500, 32, 20);
-    var mat = new THREE.ShaderMaterial({
-      side: THREE.BackSide, depthWrite: false, fog: false,
-      uniforms: {
-        top: { value: new THREE.Color(preset.top) },
-        bottom: { value: new THREE.Color(preset.bottom) },
-        offset: { value: 0.12 }
-      },
-      vertexShader: 'varying vec3 vWorld; void main(){ vWorld = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-      fragmentShader: 'uniform vec3 top; uniform vec3 bottom; uniform float offset; varying vec3 vWorld;' +
-        'void main(){ float h = clamp((vWorld.y + offset) * 1.6, 0.0, 1.0);' +
-        'vec3 c = mix(bottom, top, pow(h, 0.75)); gl_FragColor = vec4(c, 1.0);\n' +
-        '#include <tonemapping_fragment>\n' +
-        '#include <colorspace_fragment>\n}'
-    });
-    var sky = new THREE.Mesh(geo, mat);
-    sky.frustumCulled = false;
-    return sky;
-  }
-
   /* ================================================================== */
   /* main world builder                                                 */
   /* ================================================================== */
-  F1.world = { textures: Textures, skyPresets: SKY_PRESETS };
+  F1.world = { textures: Textures };
 
   F1.world.build = function (model, meta, opts) {
     opts = opts || {};
@@ -558,6 +497,27 @@
       setSurfaceWet = surface.setWetness;
     }
 
+    /* ---------------- trackside props + planting ---------------- */
+    /* These two modules replace the old barrier/grandstand/pit/tree code. The
+       generic blocks below are skipped when they are present, so there is
+       exactly one barrier system and one set of trees in the world. */
+    var props = null, flora = null, envArt = null;
+    if (F1.props) {
+      props = F1.props.build(model, meta, { quality: q });
+      group.add(props.group);
+    }
+    if (F1.vegetation) {
+      flora = F1.vegetation.build(model, meta, { quality: q });
+      group.add(flora.group);
+    }
+    var ENVART = (F1.ENVIRONMENTS && F1.ENVIRONMENTS[meta.id]) || null;
+    if (ENVART && ENVART.landmarks) {
+      try {
+        envArt = ENVART.landmarks(model, { quality: q });
+        if (envArt && envArt.group) group.add(envArt.group);
+      } catch (e) { console.warn('[env] landmarks failed for ' + meta.id, e); }
+    }
+
     /* ---------------- ground ---------------- */
     var spanW = Math.max(model.bounds.maxX - model.bounds.minX, model.bounds.maxZ - model.bounds.minZ);
     var groundSize = Math.max(4200, spanW * 3.0);
@@ -569,6 +529,29 @@
       color: new THREE.Color(isDesert ? '#c9b98f' : F1.util.mixHex(theme.ground, '#9fae86', 0.35)),
       map: groundTex, roughness: 0.98, metalness: 0
     });
+    /* Mowing stripes + broad pasture variation, keyed off world position so
+       they never tile with the grass texture. Two passes at different angles
+       read as a mower pattern rather than a repeating band. */
+    if (!isDesert) {
+      groundMat.onBeforeCompile = function (shader) {
+        shader.vertexShader = shader.vertexShader
+          .replace('#include <common>', '#include <common>\nvarying vec2 vMowXZ;')
+          .replace('#include <begin_vertex>',
+            '#include <begin_vertex>\nvMowXZ = (modelMatrix * vec4(transformed, 1.0)).xz;');
+        shader.fragmentShader = shader.fragmentShader
+          .replace('#include <common>',
+            '#include <common>\nvarying vec2 vMowXZ;')
+          .replace('#include <map_fragment>',
+            '#include <map_fragment>\n' +
+            'float b1 = fract((vMowXZ.x * 0.82 + vMowXZ.y * 0.57) / 16.0);\n' +
+            'float b2 = fract((vMowXZ.x * -0.35 + vMowXZ.y * 0.94) / 47.0);\n' +
+            'float mow = smoothstep(0.06, 0.44, b1) * (1.0 - smoothstep(0.56, 0.94, b1));\n' +
+            'mow = mix(0.5, mow, 0.85);\n' +
+            'float pvari = 0.94 + 0.10 * sin(vMowXZ.x * 0.011) * sin(vMowXZ.y * 0.013);\n' +
+            'diffuseColor.rgb *= mix(0.90, 1.07, mow) * pvari * mix(0.97, 1.03, b2);');
+      };
+      groundMat.customProgramCacheKey = function () { return 'f1-ground-mow'; };
+    }
     // ground box: the visible top face plus a thick skirt so low camera
     // angles never see the void under the terrain
     var groundGeo = new THREE.BoxGeometry(groundSize, 240, groundSize);
@@ -676,6 +659,7 @@
 
     }
 
+    if (!props && !flora) {
     /* ---------------- barriers or street walls ---------------- */
     var wallTex = Textures.concrete();
     var barrierMat = new THREE.MeshStandardMaterial({
@@ -1154,12 +1138,15 @@
       if (palmLeafGeos.length) group.add(new THREE.Mesh(mergeNonIndexed(palmLeafGeos), palmLeafMat));
     }
 
+
+
     // centreline samples reused by the city block / water placement code
     var trackPtsWater = [];
     for (var tw = 0; tw < model.count; tw += 3) {
       trackPtsWater.push([model.x[tw] - ORIGIN.x, model.z[tw] - ORIGIN.z]);
     }
 
+    }
     /* ---------------- city corridor (street + city circuits) ---------- */
     // Street circuits need a continuous wall of buildings hugging the lap,
     // not random boxes in a field: walk the centreline and lay a front row
@@ -1452,6 +1439,9 @@
     }
 
     /* ---------------- circuit-specific landmarks ---------------- */
+    /* circuits with a data/environments/<id>.js bring their own landmarks,
+       so the hand-written legacy features stay out of their way */
+    if (!envArt) {
     function feature(name, fn) { if (features.indexOf(name) >= 0) fn(); }
 
     feature('sphere', function () {
@@ -1856,6 +1846,8 @@
       });
     }
 
+    }
+
     /* ---------------- trackside advertising boards ---------------- */
     var boards = [];
     var boardWords = ['PIRELLI', 'ARAMCO', 'DHL', 'ROLEX', 'HEINEKEN'];
@@ -1887,6 +1879,9 @@
     var startLightsOn = 0;
     function update(dt) {
       if (atmo) atmo.update(dt);
+      if (props) props.update(dt);
+      if (flora) flora.update(dt);
+      if (envArt && envArt.update) envArt.update(dt, t);
       var t = performance.now() * 0.001;
       // start lights idle blink when not in a race
       if (!opts.raceActive) {
@@ -1927,6 +1922,9 @@
       exposure: atmo.exposure,
       grade: atmo.grade,
       floodlights: floodlights,
+      props: props,
+      flora: flora,
+      art: ENVART,
       update: update,
       setShadowFocus: setShadowFocus,
       meta: meta,

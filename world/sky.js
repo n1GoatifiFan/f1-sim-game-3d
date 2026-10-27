@@ -23,11 +23,11 @@
   /* ---------------------------------------------------------------- */
   var ATMOS = {
     day: {
-      zenith: 0x2a63b8, horizon: 0xc9dcf0, ground: 0x9aa79a,
+      zenith: 0x1c4fa8, horizon: 0xbcd6ef, ground: 0x9aa79a,
       sunColor: 0xfff6e6, sunPower: 26, sunGlow: 0.55, sunIntensity: 3.5,
       haze: 0.55, cloudCover: 0.34, cloudTint: 0xfbfcff, cloudBright: 1.0,
       hemiSky: 0xb9cfe4, hemiGround: 0x4d5338, hemiIntensity: 0.42,
-      fogTint: 0xd2e0ee, fogNearK: 0.30, fogFarK: 1.3, exposure: 2.0,
+      fogTint: 0xc9d9ea, fogNearK: 0.30, fogFarK: 1.3, exposure: 2.0,
       starAlpha: 0, sunElev: 54, sunAzim: 148, turbidity: 3.0, rayleigh: 2.35,
       grade: { contrast: 1.075, saturation: 1.06, lift: 0.008, gain: 1.0, tintU: 0.006 }
     },
@@ -68,10 +68,12 @@
     for (var k in base) p[k] = base[k];
     p.grade = {};
     for (var g in base.grade) p.grade[g] = base.grade[g];
-    p.sunElev = base.sunElev + (rnd() - 0.5) * 6;
-    p.sunAzim = base.sunAzim + (rnd() - 0.5) * 40;
-    p.cloudCover = Math.min(0.85, Math.max(0.08, base.cloudCover + (rnd() - 0.5) * 0.2));
-    p.haze = Math.min(0.95, Math.max(0.2, base.haze + (rnd() - 0.5) * 0.12));
+    /* small, seeded variation only: a circuit's sky has to look the same every
+       time it is loaded (and in every before/after screenshot) */
+    p.sunElev = base.sunElev + (rnd() - 0.5) * 3;
+    p.sunAzim = base.sunAzim + (rnd() - 0.5) * 18;
+    p.cloudCover = Math.min(0.7, Math.max(0.12, base.cloudCover + (rnd() - 0.5) * 0.06));
+    p.haze = Math.min(0.9, Math.max(0.25, base.haze + (rnd() - 0.5) * 0.05));
     p.zenith = new THREE.Color(base.zenith).offsetHSL(0, 0, (rnd() - 0.5) * 0.03);
     p.horizon = new THREE.Color(base.horizon).offsetHSL(0, 0, (rnd() - 0.5) * 0.02);
     p.fogTint = new THREE.Color(base.fogTint);
@@ -214,16 +216,18 @@
     '  float sunEdge = pow(max(dot(d, uSunDir), 0.0), 2.0);',
     '  vec3 lit = uTint * (0.9 + 0.6 * sunEdge);',
     '  vec3 shade = mix(uSkyBottom * 0.55, uTint * vec3(0.62, 0.66, 0.74), 0.5) * (1.0 - uStorm * 0.35);',
-    '  vec3 cloudCol = mix(shade, lit, smoothstep(0.15, 0.85, density));',
+    '  vec3 cloudCol = mix(shade, lit, smoothstep(0.15, 0.85, density)) * 0.94;',
     '  cloudCol += uSunColor * sunAmt * (0.55 - density * 0.25) * (1.0 - uNight * 0.8);',
 
-    '  float alpha = density * 0.88;',
+    '  float alpha = density * 0.74;',
     '  alpha *= mix(1.0, 1.25, uStorm);',
     '  alpha *= smoothstep(0.02, 0.3, h);',
     '  alpha = clamp(alpha, 0.0, 0.94);',
     '  gl_FragColor = vec4(cloudCol, alpha);',
+    '#ifndef RAW_HDR',
     '  #include <tonemapping_fragment>',
     '  #include <colorspace_fragment>',
+    '#endif',
     '}'
   ].join('\n');
 
@@ -252,8 +256,10 @@
     '  float fade = smoothstep(-0.02, 0.22, d.y);',
     '  vec3 c = mix(vec3(0.78, 0.85, 1.0), vec3(1.0, 0.94, 0.82), hash31(cell + 7.0));',
     '  gl_FragColor = vec4(c * star * twinkle * uAlpha * fade * 1.6, 1.0);',
+    '#ifndef RAW_HDR',
     '  #include <tonemapping_fragment>',
     '  #include <colorspace_fragment>',
+    '#endif',
     '}'
   ].join('\n');
 
@@ -318,9 +324,11 @@
       uStorm: { value: 0 },
       uBright: { value: p.cloudBright }
     };
+    F1.sky._rawHDR = !!(F1.settings && F1.settings.preset && F1.settings.preset().postFX);
     var clouds = new THREE.Mesh(
       new THREE.SphereGeometry(2400, 40, 24, 0, Math.PI * 2, 0, Math.PI * 0.55),
       new THREE.ShaderMaterial({
+        defines: F1.sky._rawHDR ? { RAW_HDR: 1 } : {},
         uniforms: cloudUniforms,
         vertexShader: CLOUD_VS,
         fragmentShader: CLOUD_FS,
@@ -341,6 +349,7 @@
     var stars = new THREE.Mesh(
       new THREE.SphereGeometry(2300, 32, 20),
       new THREE.ShaderMaterial({
+        defines: F1.sky._rawHDR ? { RAW_HDR: 1 } : {},
         uniforms: starUniforms, vertexShader: STAR_VS, fragmentShader: STAR_FS,
         side: THREE.BackSide, transparent: true, depthWrite: false, depthTest: true,
         blending: THREE.AdditiveBlending, fog: false

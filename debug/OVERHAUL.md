@@ -101,13 +101,57 @@ Fixed along the way (each was a real bug that affected the before shots):
   0.94 to 0.08, raises the environment reflection and cools the gravel. Wired to
   `world.setWeather('wet')`.
 
+## 10.4 — Monza trackside environment
+
+Three new modules, all classic scripts, no network and no new dependency:
+
+* `world/props.js` (`F1.props.build`) — Jersey plinth + Armco beam with posts and
+  bolts swept along the lap (painted street wall on street/harbour themes),
+  alpha-tested catch fencing only where `|curvature| > 1/200`, TecPro and tyre
+  stacks where `|curvature| > 1/70`, 12 grandstands with roof + fascia + posts
+  and an instanced, bobbing crowd, pit complex painted in the 2026 team primary
+  colours (one garage per team), pit wall, start gantry with five bulbs, marshal
+  huts and flags, braking boards, sponsor hoardings, two bridges, lighting masts.
+* `world/vegetation.js` (`F1.vegetation.build`) — six species (poplar, plane,
+  pine, cypress, palm, oak) as one trunk + one leaf `InstancedMesh` each, wind
+  via `onBeforeCompile`, instanced grass tufts, a 48-segment backdrop treeline.
+  An occupancy grid keeps trees off the track, run-off and stands.
+* `data/environments/italy.js` (`F1.ENVIRONMENTS.italy`) — palette, mood,
+  per-circuit look deltas and `landmarks()`: the swept, banked 1955 oval (deck,
+  earth bank, parapet, two link roads), a plane-tree colonnade with Italian
+  flags, Parabolica gravel traps, and four FORZA FERRARI banners.
+
+The legacy barrier → grandstand → pit → tree → landmark run in
+`world/environment.js` is now skipped whenever a circuit has props/vegetation or
+an environment module, so the two generations never stack (this also removed a
+duplicate oval and a floating grass disc that showed up in the first passes).
+
+Bugs found and fixed in this section, all of them visible in the after shots:
+
+* **Sky was milky white.** The cloud and star shaders tone-mapped and sRGB
+  encoded their output while the composer's `OutputPass` tone-mapped again.
+  They now skip both chunks when the composer is active (`RAW_HDR` define).
+* **Crowd read as grey noise, then as thin blades.** Each spectator quad showed
+  the whole texture (averaging to mush) and was rotated 90° to the stand. Now an
+  8×8 atlas cell is picked per instance in the vertex shader, the quads face the
+  track and stand on the front lip of each tread.
+* **Oval sat across the main straight** — 210 m *ahead* of the start line, a
+  green wall across the road in the chase shot. Placement now walks outward
+  along the normal and rejects any position whose footprint comes within 26 m of
+  a centreline sample.
+* **Armco swallowed the sky** (metalness 0.55 on a vertical face under a high
+  sun) and read navy black; now galvanised with a bright albedo.
+* Ground now carries world-space mowing stripes and pasture variation, so the
+  grass no longer tiles visibly.
+
+Still open in this section (honest list): the asphalt is a stop lighter than
+broadcast Monza in the far distance, the crowd is a texture-lit block rather
+than individually modelled people, the banking is invented geometry placed for
+silhouette rather than surveyed, and SSAO is off below High.
+
 ### Next
 
-* 10.4 — Monza trackside: barrier systems (Armco + posts + bolts, TecPro, tyre
-  walls, catch fencing), grandstands with crowd, pit complex with 2026 team
-  colours, gantries, marshal posts, boards, trees/poplars, the oval banking
-  silhouette, and the `data/environments/italy.js` art direction.
-* Then 10.5 time-of-day/weather, 10.6 the other 23 circuits in batches.
+* 10.5 time-of-day/weather, 10.6 the other 23 circuits in batches.
 
 ## Size budget
 
@@ -119,10 +163,12 @@ Fixed along the way (each was a real bug that affected the before shots):
 | `world/post.js` | — | 10 KB | new |
 | `world/surface.js` | — | 27 KB | new |
 | `world/shots.js` | — | 8 KB | new (dev tool, safe to ship) |
-| `data/environments/*` | — | — | not started |
+| `world/props.js` | — | 40 KB | new: barriers, stands, crowd, pit, gantries |
+| `world/vegetation.js` | — | 18 KB | new: 6 species, grass, treeline |
+| `data/environments/italy.js` | — | 16 KB | new: Monza look + landmarks |
 | generated textures | — | ~24 MB GPU | canvas-generated at load, 0 KB on disk |
 | `debug/` before+after | — | 16 MB | reference shots, not loaded by the game |
 
 Runtime textures are generated in-page, so the download size barely moves:
-the whole game is still ~2.3 MB on disk. VRAM cost is what grows (two 512×2048
+the whole game is still ~2.4 MB on disk (82 → 85 files). VRAM cost is what grows (two 512×2048
 lap maps, 512² asphalt maps, PMREM cube, HDR render targets).

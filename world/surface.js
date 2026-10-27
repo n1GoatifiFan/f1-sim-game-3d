@@ -198,7 +198,7 @@
     var rc = cv(size, size), rctx = rc.getContext('2d');
     var rnd = F1.rng(0x5eed11);
 
-    ctx.fillStyle = '#5f656d';
+    ctx.fillStyle = '#41464d';
     ctx.fillRect(0, 0, size, size);
     hctx.fillStyle = '#6a6a6a';
     hctx.fillRect(0, 0, size, size);
@@ -209,7 +209,7 @@
     for (var i = 0; i < size * 14; i++) {
       var x = rnd() * size, y = rnd() * size;
       var rad = 0.45 + rnd() * 1.5;
-      var g = 118 + rnd() * 42;
+      var g = 92 + rnd() * 44;
       ctx.fillStyle = 'rgba(' + Math.round(g) + ',' + Math.round(g + 1) + ',' + Math.round(g + 4) + ',' + (0.14 + rnd() * 0.26) + ')';
       ctx.beginPath(); ctx.arc(x, y, rad, 0, TAU); ctx.fill();
       var hg = 105 + rnd() * 110;
@@ -369,7 +369,7 @@
       roughnessMap: maps.rough,
       roughness: 0.94,
       metalness: 0.02,
-      normalScale: new THREE.Vector2(0.42, 0.42),
+      normalScale: new THREE.Vector2(0.58, 0.58),
       envMapIntensity: 1.05,
       dithering: true
     });
@@ -463,7 +463,6 @@
       return [{ off: -w, y: 0 }, { off: -w * 0.5, y: 0.012 }, { off: 0, y: 0.02 },
               { off: w * 0.5, y: 0.012 }, { off: w, y: 0 }];
     }, { step: 2, vScale: 9 });
-    F1.surface._debug = { lapTex: lapTex, roadMat: roadMat, roadGeo: roadGeo, maps: maps };
     var road = new THREE.Mesh(roadGeo, roadMat);
     road.receiveShadow = true;
     road.name = 'asphalt';
