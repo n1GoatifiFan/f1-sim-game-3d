@@ -180,5 +180,5 @@ silhouette rather than surveyed, and SSAO is off below High.
 | `debug/` before+after | — | 16 MB | reference shots, not loaded by the game |
 
 Runtime textures are generated in-page, so the download size barely moves:
-the whole game is still ~2.4 MB on disk (82 → 85 files). VRAM cost is what grows (two 512×2048
+the whole game is still ~2.1 MB on disk (77 → 83 files, excluding `debug/`). VRAM cost is what grows (two 512×2048
 lap maps, 512² asphalt maps, PMREM cube, HDR render targets).

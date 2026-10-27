@@ -22,7 +22,7 @@ the folder.
 modules, no `fetch`, no XHR, no CDN. Saves live in `localStorage` (with an
 in-memory fallback if the browser blocks it).
 
-**Size:** ~2.4 MB on disk, 85 files. All textures are generated in-page at load
+**Size:** ~2.1 MB on disk, 83 files (plus `debug/` reference shots, not shipped). All textures are generated in-page at load
 (no image files), so the download stays small while the GPU budget grows.
 
 **Art overhaul:** the circuit renderer was rebuilt for broadcast-quality visuals —
