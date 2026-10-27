@@ -56,16 +56,23 @@
       /* the per-circuit filmic grade + exposure, applied by the post chain */
       if (F1.post && F1.post.setGrade) {
         var g = world.grade || {};
+        /* a circuit can push the time-of-day look around without touching the
+           global pipeline: data/environments/<id>.js -> look{...} */
+        var look = (world.art && world.art.look) || {};
         /* exposure is a camera property: it has to happen before the tone
            curve, so it goes on the renderer, not in the display-referred grade */
         if (F1.renderer && F1.renderer.renderer) {
-          F1.renderer.renderer.toneMappingExposure = world.exposure || 1;
+          F1.renderer.renderer.toneMappingExposure =
+            (world.exposure || 1) * (look.exposure || 1);
         }
         F1.post.setGrade({
           exposure: 1,
-          contrast: g.contrast, saturation: g.saturation, lift: g.lift,
-          gain: g.gain, tintU: g.tintU,
-          vignette: mode === 'race' ? 0.34 : 0.24,
+          contrast: (g.contrast || 1) * (look.contrast || 1),
+          saturation: (g.saturation || 1) * (look.saturation || 1),
+          lift: g.lift, gain: g.gain,
+          tintU: (g.tintU || 0) + (look.warm || 0),
+          vignette: look.vignette !== undefined ? look.vignette
+            : (mode === 'race' ? 0.34 : 0.24),
           grain: 0.014
         });
         F1.post.setBloom(0.3, 0.55, 0.92);

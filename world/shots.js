@@ -97,6 +97,10 @@
 
     open: function (id) {
       F1.shots.close();
+      /* screenshot rig: the auto-quality fallback would silently drop the
+         preset mid-capture (SwiftShader is slow) and every shot would be
+         taken at a different quality */
+      if (F1.settings && F1.settings.graphics) F1.settings.graphics.autoQuality = false;
       var api = F1.trackScene.create(id, { mode: 'shots' });
       state.api = api;
       state.id = id;
@@ -107,6 +111,7 @@
     },
 
     close: function () {
+      if (F1.settings && F1.settings.graphics) F1.settings.graphics.autoQuality = true;
       if (state.api) {
         try { state.api.destroy(); } catch (e) {}
         state.api = null;
@@ -132,6 +137,10 @@
     grab: function () {
       if (!state.api) return null;
       var r = F1.renderer;
+      /* the camera is moved by hand here, so the world has to follow: the sky
+         dome, the shadow focus and the LOD rings are all camera-relative */
+      viewCameraFor(state.api, state.view);
+      state.api.update(0.016);
       viewCameraFor(state.api, state.view);
       if (r.render) r.render(state.scene || state.api.scene, state.api.camera);
       return r.renderer.domElement.toDataURL('image/png');

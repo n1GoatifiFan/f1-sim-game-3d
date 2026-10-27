@@ -72,10 +72,12 @@
   /* post chain                                                          */
   /* ------------------------------------------------------------------ */
   R.buildPost = function () {
+    /* the sky dome tone-maps itself only when there is no composer */
     if (!F1.post || !F1.post.available()) { R.post = null; return null; }
     if (!R.quality.postFX) {
       if (F1.post.composer) F1.post.dispose();
       R.post = null;
+      if (F1.sky && F1.sky.setHDRMode) F1.sky.setHDRMode(false);
       return null;
     }
     var scene = R._lastScene || (F1.app && F1.app.sceneApi && F1.app.sceneApi.scene);
@@ -83,6 +85,7 @@
     if (!scene) return null;
     var ok = F1.post.create(R.renderer, scene, cam, R.quality);
     R.post = ok ? F1.post : null;
+    if (F1.sky && F1.sky.setHDRMode) F1.sky.setHDRMode(!!ok);
     if (ok) {
       var dpr = R.pixelRatio || 1;
       F1.post.resize(R.width, R.height, dpr);

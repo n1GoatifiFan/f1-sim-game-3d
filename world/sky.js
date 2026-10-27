@@ -205,7 +205,7 @@
     '  float cirrus = fbm(uv * 1.9 + windA + 13.0);',
     '  float cumulus = fbm(uv * 0.85 + windB);',
     '  float cover = uCover;',
-    '  float c1 = smoothstep(0.62 - cover * 0.34, 0.95 - cover * 0.22, cumulus);',
+    '  float c1 = smoothstep(0.70 - cover * 0.34, 1.04 - cover * 0.22, cumulus);',
     '  float c2 = smoothstep(0.55, 0.92, cirrus) * 0.55;',
     '  float density = clamp(c1 * (1.0 - c2 * 0.45) + c2 * 0.6, 0.0, 1.0);',
     '  density *= smoothstep(0.0, 0.16, h);',        /* no clouds below the horizon */
@@ -214,12 +214,12 @@
     /* lighting: silver lining towards the sun, grey undersides away from it */
     '  float sunAmt = pow(max(dot(d, uSunDir), 0.0), 6.0);',
     '  float sunEdge = pow(max(dot(d, uSunDir), 0.0), 2.0);',
-    '  vec3 lit = uTint * (0.9 + 0.6 * sunEdge);',
+    '  vec3 lit = uTint * (1.05 + 0.55 * sunEdge);',
     '  vec3 shade = mix(uSkyBottom * 0.55, uTint * vec3(0.62, 0.66, 0.74), 0.5) * (1.0 - uStorm * 0.35);',
     '  vec3 cloudCol = mix(shade, lit, smoothstep(0.15, 0.85, density)) * 0.94;',
     '  cloudCol += uSunColor * sunAmt * (0.55 - density * 0.25) * (1.0 - uNight * 0.8);',
 
-    '  float alpha = density * 0.74;',
+    '  float alpha = density * 0.62;',
     '  alpha *= mix(1.0, 1.25, uStorm);',
     '  alpha *= smoothstep(0.02, 0.3, h);',
     '  alpha = clamp(alpha, 0.0, 0.94);',
@@ -265,6 +265,24 @@
 
   /* ---------------------------------------------------------------- */
   F1.sky = { presets: ATMOS, presetFor: presetFor };
+
+  /* Turn the dome's built-in tone mapping off (composer present) or back on
+     (plain render to the canvas). Changing a define needs a recompile, but
+     this only happens when the post chain is created or dropped. */
+  F1.sky.setHDRMode = function (raw) {
+    var mats = F1.sky._hdrMats || [];
+    for (var i = 0; i < mats.length; i++) {
+      var m = mats[i];
+      var want = raw ? 1 : 0;
+      var has = m.defines && m.defines.RAW_HDR ? 1 : 0;
+      if (want === has) continue;
+      m.defines = m.defines || {};
+      if (want) m.defines.RAW_HDR = 1; else delete m.defines.RAW_HDR;
+      m.needsUpdate = true;
+    }
+    F1.sky._rawHDR = !!raw;
+  };
+
 
   F1.sky.create = function (meta, opts) {
     opts = opts || {};
@@ -325,9 +343,10 @@
       uBright: { value: p.cloudBright }
     };
     F1.sky._rawHDR = !!(F1.settings && F1.settings.preset && F1.settings.preset().postFX);
-    var clouds = new THREE.Mesh(
-      new THREE.SphereGeometry(2400, 40, 24, 0, Math.PI * 2, 0, Math.PI * 0.55),
-      new THREE.ShaderMaterial({
+    /* every dome material that skips its own tone mapping while the composer
+       is in charge; renderer sets this again whenever the chain changes */
+    F1.sky._hdrMats = [];
+    var cloudMat = new THREE.ShaderMaterial({
         defines: F1.sky._rawHDR ? { RAW_HDR: 1 } : {},
         uniforms: cloudUniforms,
         vertexShader: CLOUD_VS,
@@ -338,7 +357,10 @@
         depthTest: true,
         blending: THREE.NormalBlending,
         fog: false
-      }));
+      });
+    F1.sky._hdrMats.push(cloudMat);
+    var clouds = new THREE.Mesh(
+      new THREE.SphereGeometry(2400, 40, 24, 0, Math.PI * 2, 0, Math.PI * 0.55), cloudMat);
     clouds.frustumCulled = false;
     clouds.renderOrder = -999;
     clouds.name = 'clouds';
@@ -346,14 +368,14 @@
 
     /* ---- stars (only meaningful at night) ------------------------------ */
     var starUniforms = { uAlpha: { value: p.starAlpha }, uTime: { value: 0 } };
-    var stars = new THREE.Mesh(
-      new THREE.SphereGeometry(2300, 32, 20),
-      new THREE.ShaderMaterial({
+    var starMat = new THREE.ShaderMaterial({
         defines: F1.sky._rawHDR ? { RAW_HDR: 1 } : {},
         uniforms: starUniforms, vertexShader: STAR_VS, fragmentShader: STAR_FS,
         side: THREE.BackSide, transparent: true, depthWrite: false, depthTest: true,
         blending: THREE.AdditiveBlending, fog: false
-      }));
+      });
+    F1.sky._hdrMats.push(starMat);
+    var stars = new THREE.Mesh(new THREE.SphereGeometry(2300, 32, 20), starMat);
     stars.frustumCulled = false;
     stars.renderOrder = -998;
     stars.visible = p.starAlpha > 0.02;

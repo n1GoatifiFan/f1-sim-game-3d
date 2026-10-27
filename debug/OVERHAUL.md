@@ -143,6 +143,16 @@ Bugs found and fixed in this section, all of them visible in the after shots:
   sun) and read navy black; now galvanised with a bright albedo.
 * Ground now carries world-space mowing stripes and pasture variation, so the
   grass no longer tiles visibly.
+* **Screenshots were not comparable.** `F1.shots.grab()` rendered straight after
+  moving the camera, without a world tick, so the sky dome was still centred on
+  the *previous* camera position — the gradient collapsed to a flat teal and the
+  sky looked washed out in half the captures. `grab()` now ticks the world once.
+* **Auto-quality silently changed the preset mid-capture.** SwiftShader renders
+  at ~8 fps, the "below 40 fps for 5 s" fallback fired during a capture and some
+  shots were taken at Low (no composer at all). `shots.open()` now pins the
+  quality while the rig is in use, and the sky's tone-mapping guard is switched
+  at runtime (`F1.sky.setHDRMode`) so the Low preset — a real player path — also
+  gets a correctly tone-mapped dome.
 
 Still open in this section (honest list): the asphalt is a stop lighter than
 broadcast Monza in the far distance, the crowd is a texture-lit block rather
